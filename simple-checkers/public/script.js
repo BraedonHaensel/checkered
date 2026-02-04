@@ -1,3 +1,136 @@
+const gameBoard = document.getElementById('game-board');
+const searchButton = document.getElementById('search-button');
+const statusMessage = document.getElementById('status-message');
+
+// Server WebSocket URL
+const SERVER_WEBSOCKET_URL = 'ws://localhost:3000';
+
+// Game board dimensions
+const BOARD_ROWS = 8;
+const BOARD_COLS = 8;
+
+// Tile occupation states
+const TILE_STATE = {
+    EMPTY: 0,
+    RED_PIECE: 1,
+    BLACK_PIECE: 2,
+};
+
+// WebSocket instance for server connections
 let webSocket;
 
-webSocket = new WebSocket('ws://localhost:3000');
+// Game board data
+let board;
+
+// Player color
+let playerColor;
+
+// Search for opponent button
+searchButton.addEventListener('click', () => {
+    // Open a new WebSocket connection
+    if (webSocket) webSocket.close();
+    webSocket = new WebSocket(SERVER_WEBSOCKET_URL);
+
+    // Hide search button
+    searchButton.style.display = 'none';
+
+    // Set searching message
+    statusMessage.textContent = 'Searching for an opponent...';
+
+    // Handle socket messages
+    webSocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // Handle game start events
+        if (data.type === 'start') {
+            playerColor = data.playerColor;
+            statusMessage.textContent =
+                playerColor === 'black' ? 'Your turn!' : "Opponent's turn...";
+        }
+    };
+});
+
+/**
+ * Create the checkers board tiles.
+ */
+function createBoardTiles() {
+    // Reset and create empty checkers board
+    gameBoard.innerHTML = '';
+
+    // Index to assign to the next occupiable tile
+    let tileIndex = 0;
+
+    for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+            // Create tile
+            const tile = document.createElement('div');
+            tile.classList.add('tile');
+
+            // Calculate if this is a dark or light tile
+            const isDarkTile = (row + col) % 2 === 1;
+
+            // Add tile color
+            tile.style.backgroundColor = isDarkTile ? 'sienna' : 'bisque';
+
+            // Only dark tiles are occupiable
+            if (isDarkTile) {
+                tile.dataset.index = tileIndex;
+                tileIndex++;
+            }
+
+            // Add tile to board
+            gameBoard.appendChild(tile);
+        }
+    }
+}
+
+/**
+ * Get the tile states for a starting checkers board.
+ */
+function getNewBoardTileStates() {
+    // Only 32 tiles are occupiable in checkers. The first 12 start with black pieces, the middle 8
+    // are empty, and the last 12 start with red pieces
+    const board = [
+        ...Array(12).fill(TILE_STATE.RED_PIECE),
+        ...Array(8).fill(TILE_STATE.EMPTY),
+        ...Array(12).fill(TILE_STATE.BLACK_PIECE),
+    ];
+    return board;
+}
+
+/**
+ * Updates the occupation states of each tile (piece positions).
+ */
+function updateTileStates(newTileStates) {
+    // clear board then draw pieces from scratch? or move one piece (and have a draw all to start)?
+    // board is an array of null (empty), 0 (red), 1 (black)
+    // array is of length 32 for the 32 tiles
+    console.log(`Updating to new board: ${newTileStates}`);
+
+    for (let i = 0; i < newTileStates.length; i++) {
+        const tileState = newTileStates[i];
+        console.log(tileState);
+
+        // Handle empty tiles
+        if (tileState === TILE_STATE.EMPTY) {
+            continue;
+        }
+
+        // Create piece
+        const piece = document.createElement('div');
+        piece.classList.add('piece');
+        piece.dataset.index = i;
+
+        // Add piece color
+        piece.style.backgroundColor =
+            tileState === TILE_STATE.RED_PIECE ? 'red' : 'black';
+
+        // Add piece to tile
+        const tile = document.querySelector(`[data-index='${i}']`);
+        tile.appendChild(piece);
+    }
+}
+
+// Initialize the checkers board
+createBoardTiles();
+updateTileStates(getNewBoardTileStates());
