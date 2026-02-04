@@ -29,17 +29,114 @@ let isBlackPlayer;
 let isYourTurn;
 
 /**
+ * Gets the TILE_STATE for the player's pieces
+ */
+function getOwnedPieceState() {
+    return isBlackPlayer ? TILE_STATE.BLACK_PIECE : TILE_STATE.RED_PIECE;
+}
+
+/**
+ * Returns the row number given a piece's index
+ */
+function indexToRow(pieceIndex) {
+    // 4 occupiable tiles per row
+    return Math.floor(pieceIndex / 4);
+}
+
+/**
+ * Returns the column number given a piece's index
+ */
+function indexToCol(pieceIndex) {
+    // 4 occupiable columns per row, cols spaced 2 tiles apart
+    const col = (pieceIndex % 4) * 2;
+    // Occupiable columns are offset one tile to the right every second row
+    const offset = indexToRow(pieceIndex) % 2 === 0 ? 1 : 0;
+    return col + offset;
+}
+
+/**
+ * Get the possible move amounts for a pice
+ */
+function getPossibleMoves(pieceTileIndex) {
+    // Must be your turn to move a piece
+    if (!isYourTurn) return [];
+
+    // Must be your piece colour
+    if (tileStates[pieceTileIndex] !== getOwnedPieceState()) return [];
+
+    const possibleMoves = [];
+    const canMoveUp = isBlackPlayer; // TODO or crown
+    const canMoveDown = !isBlackPlayer; // TODO or crown
+
+    // Check if the piece can move upwards
+    if (canMoveUp) {
+        // Must be below the top row to move down
+        const row = indexToRow(pieceTileIndex);
+        if (row > 0) {
+            // Check if pieces are offset one column to the right in this row
+            const isOffsetRow = row % 2 === 0;
+            const col = indexToCol(pieceTileIndex);
+            if (col > 0) {
+                // Can move up-left
+                possibleMoves.push(isOffsetRow ? -4 : -5);
+            }
+            if (col < 7) {
+                // Can move up-right
+                possibleMoves.push(isOffsetRow ? -3 : -4);
+            }
+        }
+    }
+
+    // Check if the piece can move downwards
+    if (canMoveDown) {
+        // Must be above the bottom row to move up
+        const row = indexToRow(pieceTileIndex);
+        if (row < 7) {
+            // Check if pieces are offset one column to the right in this row
+            const isOffsetRow = row % 2 === 0;
+            const col = indexToCol(pieceTileIndex);
+            if (col > 0) {
+                // Can move down-left
+                possibleMoves.push(isOffsetRow ? 4 : 3);
+            }
+            if (col < 7) {
+                // Can move down-right
+                possibleMoves.push(isOffsetRow ? 5 : 4);
+            }
+        }
+    }
+
+    const emptyDestinationMoves = [];
+    // Verify the destinations are empty
+    for (const moveAmount of possibleMoves) {
+        if (tileStates[pieceTileIndex + moveAmount] === TILE_STATE.EMPTY) {
+            // Destination is empty, can move piece
+            emptyDestinationMoves.push(moveAmount);
+        }
+    }
+
+    // Return the remaining moves
+    return emptyDestinationMoves;
+}
+
+/**
+ * Checks if the player can currently move the piece at a given index
+ */
+function canMovePiece(pieceTileIndex) {
+    console.log(
+        `For ${pieceTileIndex} got moves: ${getPossibleMoves(pieceTileIndex)}`,
+    );
+
+    return getPossibleMoves(pieceTileIndex).length > 0;
+}
+
+/**
  * Highlights all pieces with available moves
  */
 function highlightMovablePieces() {
-    // TODO only apply to movable pieces
-    console.log('running');
-    const ownedPieceState = isBlackPlayer
-        ? TILE_STATE.BLACK_PIECE
-        : TILE_STATE.RED_PIECE;
-
     for (let i = 0; i < tileStates.length; i++) {
-        if (tileStates[i] === ownedPieceState) {
+        console.log(`${i}: ${tileStates[i]}`);
+        if (canMovePiece(i)) {
             const piece = document.querySelector(`.piece[data-index='${i}']`);
             piece.style.border = '2px solid yellow';
         }
