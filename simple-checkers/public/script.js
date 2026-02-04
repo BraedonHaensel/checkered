@@ -25,6 +25,21 @@ let board;
 // Player color
 let playerColor;
 
+// Track if it's the current player's turn
+let isYourTurn;
+
+/**
+ * Set if it's the current player's turn
+ */
+function setCurrentTurn(newIsYourTurn) {
+    isYourTurn = newIsYourTurn;
+
+    // Set turn status text
+    statusMessage.textContent = isYourTurn
+        ? 'Your turn!'
+        : "Opponent's turn...";
+}
+
 // Search for opponent button
 searchButton.addEventListener('click', () => {
     // Open a new WebSocket connection
@@ -43,9 +58,14 @@ searchButton.addEventListener('click', () => {
 
         // Handle game start events
         if (data.type === 'start') {
-            playerColor = data.playerColor;
-            statusMessage.textContent =
-                playerColor === 'black' ? 'Your turn!' : "Opponent's turn...";
+            // Parse player color
+            const isBlack = data.playerColor === 'black';
+
+            // Set board rotation for player's perspective
+            gameBoard.style.transform = `rotate(${isBlack ? '0' : '180'}deg)`;
+
+            // Set current player's turn
+            setCurrentTurn(isBlack);
         }
     };
 });
