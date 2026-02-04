@@ -36,6 +36,13 @@ function getOwnedPieceState() {
 }
 
 /**
+ * Gets the piece at a given index
+ */
+function getPieceFromIndex(pieceIndex) {
+    return document.querySelector(`.piece[data-index='${pieceIndex}']`);
+}
+
+/**
  * Returns the row number given a piece's index
  */
 function indexToRow(pieceIndex) {
@@ -135,10 +142,21 @@ function canMovePiece(pieceTileIndex) {
  */
 function highlightMovablePieces() {
     for (let i = 0; i < tileStates.length; i++) {
-        console.log(`${i}: ${tileStates[i]}`);
         if (canMovePiece(i)) {
-            const piece = document.querySelector(`.piece[data-index='${i}']`);
+            const piece = getPieceFromIndex(i);
             piece.style.border = '2px solid yellow';
+        }
+    }
+}
+
+/**
+ * Remove piece highlights
+ */
+function removePieceHighlights() {
+    for (let i = 0; i < tileStates.length; i++) {
+        const piece = getPieceFromIndex(i);
+        if (piece) {
+            piece.style.border = 'none';
         }
     }
 }
@@ -190,6 +208,25 @@ searchButton.addEventListener('click', () => {
 });
 
 /**
+ * Handle clicking on a tile
+ */
+function handleTileClick(e) {
+    // Parse the clicked tile's index
+    const tile = e.currentTarget;
+    const tileIndex = parseInt(tile.dataset.index);
+
+    if (!canMovePiece(tileIndex)) {
+        // Ignore clicks on empty tiles or pieces that can't move
+        return;
+    }
+
+    // Highlight the selected piece
+    removePieceHighlights();
+    const piece = getPieceFromIndex(tileIndex);
+    piece.style.border = '4px solid silver';
+}
+
+/**
  * Create the checkers board tiles.
  */
 function createBoardTiles() {
@@ -214,6 +251,7 @@ function createBoardTiles() {
             // Only dark tiles are occupiable
             if (isDarkTile) {
                 tile.dataset.index = tileIndex;
+                tile.addEventListener('click', handleTileClick);
                 tileIndex++;
             }
 
