@@ -19,14 +19,32 @@ const TILE_STATE = {
 // WebSocket instance for server connections
 let webSocket;
 
-// Game board data
-let board;
+// Tile occupation states (corresponds to piece positions)
+let tileStates;
 
 // Player color
-let playerColor;
+let isBlackPlayer;
 
 // Track if it's the current player's turn
 let isYourTurn;
+
+/**
+ * Highlights all pieces with available moves
+ */
+function highlightMovablePieces() {
+    // TODO only apply to movable pieces
+    console.log('running');
+    const ownedPieceState = isBlackPlayer
+        ? TILE_STATE.BLACK_PIECE
+        : TILE_STATE.RED_PIECE;
+
+    for (let i = 0; i < tileStates.length; i++) {
+        if (tileStates[i] === ownedPieceState) {
+            const piece = document.querySelector(`.piece[data-index='${i}']`);
+            piece.style.border = '2px solid yellow';
+        }
+    }
+}
 
 /**
  * Set if it's the current player's turn
@@ -38,6 +56,10 @@ function setCurrentTurn(newIsYourTurn) {
     statusMessage.textContent = isYourTurn
         ? 'Your turn!'
         : "Opponent's turn...";
+
+    if (isYourTurn) {
+        highlightMovablePieces();
+    }
 }
 
 // Search for opponent button
@@ -59,13 +81,13 @@ searchButton.addEventListener('click', () => {
         // Handle game start events
         if (data.type === 'start') {
             // Parse player color
-            const isBlack = data.playerColor === 'black';
+            isBlackPlayer = data.playerColor === 'black';
 
             // Set board rotation for player's perspective
-            gameBoard.style.transform = `rotate(${isBlack ? '0' : '180'}deg)`;
+            gameBoard.style.transform = `rotate(${isBlackPlayer ? '0' : '180'}deg)`;
 
             // Set current player's turn
-            setCurrentTurn(isBlack);
+            setCurrentTurn(isBlackPlayer);
         }
     };
 });
@@ -119,17 +141,14 @@ function getNewBoardTileStates() {
 }
 
 /**
- * Updates the occupation states of each tile (piece positions).
+ * Updates the occupation states of each tile (corresponds to piece positions).
  */
 function updateTileStates(newTileStates) {
-    // clear board then draw pieces from scratch? or move one piece (and have a draw all to start)?
-    // board is an array of null (empty), 0 (red), 1 (black)
-    // array is of length 32 for the 32 tiles
-    console.log(`Updating to new board: ${newTileStates}`);
+    tileStates = newTileStates;
 
+    // Process each tile's new state
     for (let i = 0; i < newTileStates.length; i++) {
         const tileState = newTileStates[i];
-        console.log(tileState);
 
         // Handle empty tiles
         if (tileState === TILE_STATE.EMPTY) {
@@ -146,7 +165,7 @@ function updateTileStates(newTileStates) {
             tileState === TILE_STATE.RED_PIECE ? 'red' : 'black';
 
         // Add piece to tile
-        const tile = document.querySelector(`[data-index='${i}']`);
+        const tile = document.querySelector(`.tile[data-index='${i}']`);
         tile.appendChild(piece);
     }
 }
