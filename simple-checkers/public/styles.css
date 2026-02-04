@@ -27,6 +27,14 @@ body {
     z-index: 1;
 }
 
+.move-option-indicator {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: silver;
+    opacity: 70%;
+}
+
 #search-button {
     margin-top: 20px;
     width: 180px;

@@ -36,6 +36,13 @@ function getOwnedPieceState() {
 }
 
 /**
+ * Gets the tile at a given index
+ */
+function getTileFromIndex(tileIndex) {
+    return document.querySelector(`.tile[data-index='${tileIndex}']`);
+}
+
+/**
  * Gets the piece at a given index
  */
 function getPieceFromIndex(pieceIndex) {
@@ -62,9 +69,9 @@ function indexToCol(pieceIndex) {
 }
 
 /**
- * Get the possible move amounts for a pice
+ * Get the possible move destinations for a pice
  */
-function getPossibleMoves(pieceTileIndex) {
+function getPieceMoveDestinations(pieceTileIndex) {
     // Must be your turn to move a piece
     if (!isYourTurn) return [];
 
@@ -113,28 +120,25 @@ function getPossibleMoves(pieceTileIndex) {
         }
     }
 
-    const emptyDestinationMoves = [];
     // Verify the destinations are empty
+    const moveDestinations = [];
     for (const moveAmount of possibleMoves) {
-        if (tileStates[pieceTileIndex + moveAmount] === TILE_STATE.EMPTY) {
+        const destIndex = pieceTileIndex + moveAmount;
+        if (tileStates[destIndex] === TILE_STATE.EMPTY) {
             // Destination is empty, can move piece
-            emptyDestinationMoves.push(moveAmount);
+            moveDestinations.push(destIndex);
         }
     }
 
     // Return the remaining moves
-    return emptyDestinationMoves;
+    return moveDestinations;
 }
 
 /**
  * Checks if the player can currently move the piece at a given index
  */
 function canMovePiece(pieceTileIndex) {
-    console.log(
-        `For ${pieceTileIndex} got moves: ${getPossibleMoves(pieceTileIndex)}`,
-    );
-
-    return getPossibleMoves(pieceTileIndex).length > 0;
+    return getPieceMoveDestinations(pieceTileIndex).length > 0;
 }
 
 /**
@@ -208,6 +212,41 @@ searchButton.addEventListener('click', () => {
 });
 
 /**
+ * Add a move destination option indicator to a tile
+ */
+function addMoveDestinationOptionIndicator(tileIndex) {
+    // Get destination tile
+    const destTile = getTileFromIndex(tileIndex);
+
+    // Create move indicator dot
+    const moveOptionIndicator = document.createElement('div');
+    moveOptionIndicator.classList.add('move-option-indicator');
+
+    // Add indicator to tile
+    destTile.appendChild(moveOptionIndicator);
+}
+
+/**
+ * Handle selecting a piece to move
+ */
+function handlePieceSelection(pieceTileIndex) {
+    if (!canMovePiece(pieceTileIndex)) {
+        // Ignore clicks on empty tiles or pieces that can't move
+        return;
+    }
+
+    // Highlight the selected piece only
+    const piece = getPieceFromIndex(pieceTileIndex);
+    piece.style.border = '4px solid silver';
+
+    // Add move destination option indicators
+    const moveDestinations = getPieceMoveDestinations(pieceTileIndex);
+    for (const moveDestination of moveDestinations) {
+        addMoveDestinationOptionIndicator(moveDestination);
+    }
+}
+
+/**
  * Handle clicking on a tile
  */
 function handleTileClick(e) {
@@ -215,15 +254,7 @@ function handleTileClick(e) {
     const tile = e.currentTarget;
     const tileIndex = parseInt(tile.dataset.index);
 
-    if (!canMovePiece(tileIndex)) {
-        // Ignore clicks on empty tiles or pieces that can't move
-        return;
-    }
-
-    // Highlight the selected piece
-    removePieceHighlights();
-    const piece = getPieceFromIndex(tileIndex);
-    piece.style.border = '4px solid silver';
+    handlePieceSelection(tileIndex);
 }
 
 /**
@@ -300,7 +331,7 @@ function updateTileStates(newTileStates) {
             tileState === TILE_STATE.RED_PIECE ? 'red' : 'black';
 
         // Add piece to tile
-        const tile = document.querySelector(`.tile[data-index='${i}']`);
+        const tile = getTileFromIndex(i);
         tile.appendChild(piece);
     }
 }
