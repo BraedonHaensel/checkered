@@ -1,3 +1,33 @@
+# Rough notes
+
+npx prettier . --write
+
+## Extensions
+
+GitLens
+
+Path Intellisense
+
+Prettier - Code formatter
+
+- Format all files with `npx prettier . --write`
+
+Tailwind CSS IntelliSense
+
+## VSCode Settings
+
+Recommended `.vscode/settings.json` configuration:
+
+```json
+{
+  "editor.tabSize": 2,
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "files.insertFinalNewline": true
+}
+```
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
