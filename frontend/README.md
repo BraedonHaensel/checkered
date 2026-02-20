@@ -2,7 +2,11 @@
 
 npx prettier . --write
 
-## Extensions
+## Recommended Extensions
+
+ESLint
+
+- Analyze all files with `npm run lint`
 
 GitLens
 
@@ -14,9 +18,9 @@ Prettier - Code formatter
 
 Tailwind CSS IntelliSense
 
-## VSCode Settings
+## Recommended VSCode Settings
 
-Recommended `.vscode/settings.json` configuration:
+Create a `.vscode/settings.json` file with the following configuration:
 
 ```json
 {
