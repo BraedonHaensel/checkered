@@ -16,6 +16,9 @@ const TILE_STATE = {
     BLACK_PIECE: 2,
 };
 
+// Special index to mark unoccupiable tiles (every second tile)
+const UNOCCUPIABLE_TILE_INDEX = -1;
+
 // WebSocket instance for server connections
 let webSocket;
 
@@ -27,6 +30,9 @@ let isBlackPlayer;
 
 // Track if it's the current player's turn
 let isYourTurn;
+
+// Track the currently selected piece's tile index
+let selectedPieceTileIndex;
 
 /**
  * Gets the TILE_STATE for the player's pieces
@@ -212,38 +218,54 @@ searchButton.addEventListener('click', () => {
 });
 
 /**
- * Add a move destination option indicator to a tile
+ * Add move destination option indicators
  */
-function addMoveDestinationOptionIndicator(tileIndex) {
-    // Get destination tile
-    const destTile = getTileFromIndex(tileIndex);
+function addMoveDestinationOptionIndicators(pieceTileIndex) {
+    const moveDestinations = getPieceMoveDestinations(pieceTileIndex);
+    for (const moveDestination of moveDestinations) {
+        // Get destination tile
+        const destTile = getTileFromIndex(moveDestination);
 
-    // Create move indicator dot
-    const moveOptionIndicator = document.createElement('div');
-    moveOptionIndicator.classList.add('move-option-indicator');
+        // Create move indicator dot
+        const moveOptionIndicator = document.createElement('div');
+        moveOptionIndicator.classList.add('move-option-indicator');
 
-    // Add indicator to tile
-    destTile.appendChild(moveOptionIndicator);
+        // Add indicator to tile
+        destTile.appendChild(moveOptionIndicator);
+    }
 }
 
 /**
- * Handle selecting a piece to move
+ * Remove previuos move destination option indicators
  */
-function handlePieceSelection(pieceTileIndex) {
-    if (!canMovePiece(pieceTileIndex)) {
-        // Ignore clicks on empty tiles or pieces that can't move
-        return;
-    }
-
-    // Highlight the selected piece only
-    const piece = getPieceFromIndex(pieceTileIndex);
-    piece.style.border = '4px solid silver';
-
-    // Add move destination option indicators
+function removeMoveDestinationOptionIndicators(pieceTileIndex) {
     const moveDestinations = getPieceMoveDestinations(pieceTileIndex);
     for (const moveDestination of moveDestinations) {
-        addMoveDestinationOptionIndicator(moveDestination);
+        // Get destination tile
+        const destTile = getTileFromIndex(moveDestination);
+
+        // Get the move indicator dot
+        const moveOptionIndicator = destTile.querySelector(
+            '.move-option-indicator',
+        );
+
+        // Remove the move indicator dot
+        if (moveOptionIndicator) destTile.removeChild(moveOptionIndicator);
     }
+}
+
+/**
+ * Move the currently selected piece to the destination tile index
+ */
+function handleMoveToDestination(destTileIndex) {
+    console.log(
+        `Moving piece from ${selectedPieceTileIndex} to ${destTileIndex}`,
+    );
+
+    // TODO possible issue: animating piece movement when they are bound to tiles
+    // Could do no animations. How previous location and highlight last moved piece on opponent view?
+
+    // TODO I should just start doing this in react, not keep prototyping in js
 }
 
 /**
@@ -254,7 +276,39 @@ function handleTileClick(e) {
     const tile = e.currentTarget;
     const tileIndex = parseInt(tile.dataset.index);
 
-    handlePieceSelection(tileIndex);
+    // Check if this click is to select a piece destination
+    const pieceMoveDestinations = getPieceMoveDestinations(
+        selectedPieceTileIndex,
+    );
+    if (pieceMoveDestinations.includes(tileIndex)) {
+        // Perform the piece move
+        handleMoveToDestination(tileIndex);
+        return;
+    }
+
+    if (selectedPieceTileIndex !== undefined) {
+        // Remove previous move destination option indicators
+        removeMoveDestinationOptionIndicators(selectedPieceTileIndex);
+
+        // Reset movable piece highlights
+        highlightMovablePieces();
+    }
+
+    if (tileIndex === UNOCCUPIABLE_TILE_INDEX || !canMovePiece(tileIndex)) {
+        // Selecting a tile without a movable piece clears any previous selection
+        selectedPieceTileIndex = undefined;
+        return;
+    }
+
+    // Save the newly selected piece's tile index
+    selectedPieceTileIndex = tileIndex;
+
+    // Highlight the selected piece
+    const piece = getPieceFromIndex(selectedPieceTileIndex);
+    piece.style.border = '4px solid silver';
+
+    // Add move destination option indicators
+    addMoveDestinationOptionIndicators(selectedPieceTileIndex);
 }
 
 /**
@@ -282,12 +336,16 @@ function createBoardTiles() {
             // Only dark tiles are occupiable
             if (isDarkTile) {
                 tile.dataset.index = tileIndex;
-                tile.addEventListener('click', handleTileClick);
                 tileIndex++;
+            } else {
+                tile.dataset.index = UNOCCUPIABLE_TILE_INDEX;
             }
 
             // Add tile to board
             gameBoard.appendChild(tile);
+
+            // Add click event listener
+            tile.addEventListener('click', handleTileClick);
         }
     }
 }
