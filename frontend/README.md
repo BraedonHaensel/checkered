@@ -1,6 +1,39 @@
-# Rough notes
+# Run Instructions
 
-npx prettier . --write
+1. Navigate into the `frontend` directory at the root of the repository.
+
+```bash
+cd frontend
+```
+
+2. Use [Node.js](https://nodejs.org/en) to install the dependencies.
+
+```bash
+npm install
+```
+
+3. Run the frontend.
+   - **Production environment**:
+     - Build the app for production.
+
+       ```bash
+       npm run build
+       ```
+
+     - Preview the production build.
+
+       ```bash
+       npm run preview
+       ```
+
+   - **Development environment**:
+     - Start the app in development mode.
+
+       ```bash
+       npm run dev
+       ```
+
+4. Open the displayed URL in your web browser. For example: `http://localhost:5173/`.
 
 ## Recommended Extensions
 
