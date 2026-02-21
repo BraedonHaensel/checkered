@@ -4,17 +4,25 @@ import Piece from './Piece'
 
 type Props = {
   isDark: boolean
+  playableTileIndex?: number
   tileState: TileState
+  onClick: (playableTileIndex: number) => void
 }
 
-const Tile = ({ isDark, tileState }: Props) => {
+const Tile = ({ isDark, playableTileIndex, tileState, onClick }: Props) => {
   if (!isDark) {
-    // Light tiles are never interacted with in a game of checkers
+    // Light tiles are not playable in a game of checkers
     return <div className="bg-[#FFE4C4]"></div>
+  }
+  if (playableTileIndex === undefined) {
+    throw new Error('playableTileIndex must be defined for light tiles')
   }
 
   return (
-    <div className="flex items-center justify-center bg-[#A0522D]">
+    <div
+      className="flex items-center justify-center bg-[#A0522D]"
+      onClick={() => onClick(playableTileIndex)}
+    >
       {tileState !== TileState.EMPTY && (
         <Piece isBlack={isBlackPiece(tileState)} />
       )}

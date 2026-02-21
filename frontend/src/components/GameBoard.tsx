@@ -3,30 +3,43 @@ import Tile from './Tile'
 import { PlayerColor, TileState } from '../enums'
 
 type Props = {
+  playableTileStates: Array<number>
   playerColor: PlayerColor
   isYourTurn: boolean
 }
 
-const GameBoard = ({ playerColor, isYourTurn }: Props) => {
+const GameBoard = ({ playableTileStates, playerColor, isYourTurn }: Props) => {
+  // Handle clicking on a playable tile
+  const handleTileClick = (playableTileIndex: number) => {
+    console.log(`Clicked tile: ${playableTileIndex}`)
+  }
+
   // Populate the checkers board
   const tiles = useMemo(() => {
     const result = []
+    // Index for the 32 playable dark tiles in a checkers board
+    let playableTileIndex = 0
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const isDark = (row + col) % 2 === 1
-        const tileState =
-          row <= 2 && isDark
-            ? TileState.RED_STANDARD_PIECE
-            : row >= 5 && isDark
-              ? TileState.BLACK_STANDARD_PIECE
-              : TileState.EMPTY
+        // If this is a playable tile set the state based on the board's playableTileStates
+        const tileState = isDark
+          ? playableTileStates[playableTileIndex]
+          : TileState.EMPTY
         result.push(
-          <Tile key={`${row}-${col}`} isDark={isDark} tileState={tileState} />
+          <Tile
+            key={`${row}-${col}`}
+            isDark={isDark}
+            playableTileIndex={isDark ? playableTileIndex : undefined}
+            tileState={tileState}
+            onClick={handleTileClick}
+          />
         )
+        if (isDark) playableTileIndex++
       }
     }
     return result
-  }, [])
+  }, [playableTileStates])
 
   return (
     <div
