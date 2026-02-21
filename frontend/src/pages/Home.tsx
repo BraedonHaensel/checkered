@@ -72,7 +72,7 @@ const Home = () => {
       ) : (
         !isInGame && <SearchButton onClick={handleSearchForOpponent} />
       )}
-      {statusMessage && <p>{statusMessage}</p>}
+      {statusMessage && <p className="text-2xl">{statusMessage}</p>}
     </div>
   )
 }

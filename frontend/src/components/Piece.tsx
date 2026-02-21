@@ -1,11 +1,11 @@
 type Props = {
-  isRed: boolean
+  isBlack: boolean
 }
 
-const Piece = ({ isRed }: Props) => {
+const Piece = ({ isBlack }: Props) => {
   return (
     <div
-      className={`h-3/4 w-3/4 rounded-full ${isRed ? 'bg-red-500' : 'bg-black'}`}
+      className={`h-3/4 w-3/4 rounded-full ${isBlack ? 'bg-black' : 'bg-red-500'}`}
     ></div>
   )
 }

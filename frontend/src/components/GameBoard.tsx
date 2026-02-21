@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import Tile from './Tile'
-import { PlayerColor } from '../enums'
+import { PlayerColor, TileState } from '../enums'
 
 type Props = {
   playerColor: PlayerColor
@@ -14,8 +14,14 @@ const GameBoard = ({ playerColor, isYourTurn }: Props) => {
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const isDark = (row + col) % 2 === 1
+        const tileState =
+          row <= 2 && isDark
+            ? TileState.RED_STANDARD_PIECE
+            : row >= 5 && isDark
+              ? TileState.BLACK_STANDARD_PIECE
+              : TileState.EMPTY
         result.push(
-          <Tile key={`${row}-${col}`} isDark={isDark} num={row * 8 + col} />
+          <Tile key={`${row}-${col}`} isDark={isDark} tileState={tileState} />
         )
       }
     }

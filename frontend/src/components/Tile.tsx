@@ -1,11 +1,13 @@
+import { TileState } from '../enums'
+import { isBlackPiece } from '../utils'
 import Piece from './Piece'
 
 type Props = {
   isDark: boolean
-  num: number
+  tileState: TileState
 }
 
-const Tile = ({ isDark, num }: Props) => {
+const Tile = ({ isDark, tileState }: Props) => {
   if (!isDark) {
     // Light tiles are never interacted with in a game of checkers
     return <div className="bg-[#FFE4C4]"></div>
@@ -13,7 +15,9 @@ const Tile = ({ isDark, num }: Props) => {
 
   return (
     <div className="flex items-center justify-center bg-[#A0522D]">
-      <Piece isRed={num != 1} />
+      {tileState !== TileState.EMPTY && (
+        <Piece isBlack={isBlackPiece(tileState)} />
+      )}
     </div>
   )
 }
