@@ -2,9 +2,10 @@ import Piece from './Piece'
 
 type Props = {
   isDark: boolean
+  num: number
 }
 
-const Tile = ({ isDark }: Props) => {
+const Tile = ({ isDark, num }: Props) => {
   if (!isDark) {
     // Light tiles are never interacted with in a game of checkers
     return <div className="bg-[#FFE4C4]"></div>
@@ -12,7 +13,7 @@ const Tile = ({ isDark }: Props) => {
 
   return (
     <div className="flex items-center justify-center bg-[#A0522D]">
-      <Piece isRed />
+      <Piece isRed={num != 1} />
     </div>
   )
 }

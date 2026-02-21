@@ -1,5 +1,7 @@
 # Run Instructions
 
+**Run the prototype backend in `simple-checkers` following the instructions in its `README.md`**
+
 1. Navigate into the `frontend` directory at the root of the repository.
 
 ```bash

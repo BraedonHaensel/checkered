@@ -5,7 +5,7 @@ type Props = {
 const Piece = ({ isRed }: Props) => {
   return (
     <div
-      className={`h-3/4 w-3/4 rounded-full ${isRed ? 'bg-red-500' : 'bg-black-500'}`}
+      className={`h-3/4 w-3/4 rounded-full ${isRed ? 'bg-red-500' : 'bg-black'}`}
     ></div>
   )
 }
