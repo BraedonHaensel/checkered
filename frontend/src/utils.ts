@@ -3,7 +3,7 @@ import { TileState } from './enums'
 /**
  * Get the starting tile states for each of the 32 playable dark tiles in a checkers board.
  */
-export const getNewBoardPlayableTileStates = () => {
+export const getNewBoardTileStates = () => {
   // Only 32 tiles are playable in checkers. The first 12 start with black pieces, the middle 8
   // are empty, and the last 12 start with red pieces
   const tileStates = [
@@ -33,21 +33,21 @@ export const isKingPiece = (tileState: TileState) => {
 }
 
 /**
- * Returns the row number given a piece's playable tile index.
+ * Returns the row number given a piece's tile index.
  */
-export const playableTileIndexToRow = (playableTileIndex: number) => {
+export const tileIndexToRow = (tileIndex: number) => {
   // 4 playable tiles per row
-  return Math.floor(playableTileIndex / 4)
+  return Math.floor(tileIndex / 4)
 }
 
 /**
- * Returns the column number given a piece's playable tile index.
+ * Returns the column number given a piece's tile index.
  */
-export const playableTileIndexToCol = (playableTileIndex: number) => {
+export const tileIndexToCol = (tileIndex: number) => {
   // 4 playable columns per row, columns spaced 2 tiles apart
-  const col = (playableTileIndex % 4) * 2
+  const col = (tileIndex % 4) * 2
   // Playable columns are offset one tile to the right every second row
-  const offset = playableTileIndexToRow(playableTileIndex) % 2 === 0 ? 1 : 0
+  const offset = tileIndexToRow(tileIndex) % 2 === 0 ? 1 : 0
   return col + offset
 }
 
@@ -55,11 +55,11 @@ export const playableTileIndexToCol = (playableTileIndex: number) => {
  * Get the possible move destinations for a piece.
  */
 export const getPieceMoveDestinations = (
-  playableTileIndex: number,
-  playableTileStates: Array<number>
+  tileIndex: number,
+  tileStates: Array<number>
 ) => {
   // Must be a piece
-  const tileState = playableTileStates[playableTileIndex]
+  const tileState = tileStates[tileIndex]
   if (tileState === TileState.EMPTY) return []
 
   const possibleMoves = []
@@ -69,11 +69,11 @@ export const getPieceMoveDestinations = (
   // Check if the piece can move upwards
   if (canMoveUp) {
     // Must be below the top row to move down
-    const row = playableTileIndexToRow(playableTileIndex)
+    const row = tileIndexToRow(tileIndex)
     if (row > 0) {
       // Check if pieces are offset one column to the right in this row
       const isOffsetRow = row % 2 === 0
-      const col = playableTileIndexToCol(playableTileIndex)
+      const col = tileIndexToCol(tileIndex)
       if (col > 0) {
         // Can move up-left
         possibleMoves.push(isOffsetRow ? -4 : -5)
@@ -88,11 +88,11 @@ export const getPieceMoveDestinations = (
   // Check if the piece can move downwards
   if (canMoveDown) {
     // Must be above the bottom row to move up
-    const row = playableTileIndexToRow(playableTileIndex)
+    const row = tileIndexToRow(tileIndex)
     if (row < 7) {
       // Check if pieces are offset one column to the right in this row
       const isOffsetRow = row % 2 === 0
-      const col = playableTileIndexToCol(playableTileIndex)
+      const col = tileIndexToCol(tileIndex)
       if (col > 0) {
         // Can move down-left
         possibleMoves.push(isOffsetRow ? 4 : 3)
@@ -107,8 +107,8 @@ export const getPieceMoveDestinations = (
   // Verify the destinations are empty
   const moveDestinations = []
   for (const moveAmount of possibleMoves) {
-    const destIndex = playableTileIndex + moveAmount
-    if (playableTileStates[destIndex] === TileState.EMPTY) {
+    const destIndex = tileIndex + moveAmount
+    if (tileStates[destIndex] === TileState.EMPTY) {
       // Destination is empty, can move piece
       moveDestinations.push(destIndex)
     }
@@ -123,10 +123,10 @@ export const getPieceMoveDestinations = (
  * turn and they own the piece.
  */
 export const canMoveOwnedPieceOnTurn = (
-  playableTileIndex: number,
-  playableTileStates: Array<number>
+  tileIndex: number,
+  tileStates: Array<number>
 ) => {
   return (
-    getPieceMoveDestinations(playableTileIndex, playableTileStates).length > 0
+    getPieceMoveDestinations(tileIndex, tileStates).length > 0
   )
 }

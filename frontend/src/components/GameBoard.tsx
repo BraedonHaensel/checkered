@@ -1,40 +1,54 @@
 import { useCallback, useMemo, useState } from 'react'
 import Tile from './Tile'
 import { PlayerColor, TileState } from '../enums'
-import { canMoveOwnedPieceOnTurn, isBlackPiece } from '../utils'
+import {
+  canMoveOwnedPieceOnTurn,
+  getPieceMoveDestinations,
+  isBlackPiece,
+} from '../utils'
 
 type Props = {
-  playableTileStates: Array<number>
+  tileStates: Array<number> // Array with the state of each of the 32 playable dark tiles in the checkers board
   playerColor: PlayerColor
   isYourTurn: boolean
 }
 
 // Checkers game board
-const GameBoard = ({ playableTileStates, playerColor, isYourTurn }: Props) => {
-  const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
+const GameBoard = ({ tileStates, playerColor, isYourTurn }: Props) => {
+  const [selectedPieceTileIndex, setSelectedPieceTileIndex] = useState<number>()
 
-  // Handle clicking on a playable tile
-  const handleTileClick = useCallback(
-    (playableTileIndex: number) => {
-      if (selectedPieceIndex === playableTileIndex) {
-        // Deselect the already selected piece
-        setSelectedPieceIndex(undefined)
+  // Handle clicking on a piece
+  const handlePieceClick = useCallback(
+    (pieceTileIndex: number) => {
+      if (selectedPieceTileIndex === pieceTileIndex) {
+        // Deselect the currently selected piece
+        setSelectedPieceTileIndex(undefined)
       } else {
         // Select the piece to move
-        setSelectedPieceIndex(playableTileIndex)
+        setSelectedPieceTileIndex(pieceTileIndex)
       }
     },
-    [selectedPieceIndex]
+    [selectedPieceTileIndex]
   )
 
-  // Checks if the player can move the piece at a given playable tile index.
+  // Handle clicking on a move destination tile
+  const handleDestinationClick = useCallback(
+    (destTileIndex: number) => {
+      console.log(
+        `Moving piece from ${selectedPieceTileIndex} to ${destTileIndex}`
+      )
+    },
+    [selectedPieceTileIndex]
+  )
+
+  // Checks if the player can move the piece at a given tile index.
   const getCanMovePiece = useCallback(
-    (playableTileIndex: number): boolean => {
+    (tileIndex: number): boolean => {
       // Must be the player's turn
       if (!isYourTurn) return false
 
       // Player must own the piece
-      const tileState = playableTileStates[playableTileIndex]
+      const tileState = tileStates[tileIndex]
       if (playerColor === PlayerColor.BLACK) {
         if (!isBlackPiece(tileState)) return false
       } else {
@@ -42,40 +56,50 @@ const GameBoard = ({ playableTileStates, playerColor, isYourTurn }: Props) => {
       }
 
       // Check if the piece can be moved
-      return canMoveOwnedPieceOnTurn(playableTileIndex, playableTileStates)
+      return canMoveOwnedPieceOnTurn(tileIndex, tileStates)
     },
-    [playableTileStates, playerColor, isYourTurn]
+    [tileStates, playerColor, isYourTurn]
   )
 
   // Populate the checkers board
   const tiles = useMemo(() => {
     const result = []
+    const moveDestinations =
+      selectedPieceTileIndex !== undefined
+        ? getPieceMoveDestinations(selectedPieceTileIndex, tileStates)
+        : []
     // Index for the 32 playable dark tiles in a checkers board
-    let playableTileIndex = 0
+    let tileIndex = 0
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const isDark = (row + col) % 2 === 1
-        // If this is a playable tile set the state based on the board's playableTileStates
-        const tileState = isDark
-          ? playableTileStates[playableTileIndex]
-          : TileState.EMPTY
-        const canMovePiece = isDark && getCanMovePiece(playableTileIndex)
+        // If this is a playable tile set the state based on the board's tileStates
+        const tileState = isDark ? tileStates[tileIndex] : TileState.EMPTY
+        const canMovePiece = isDark && getCanMovePiece(tileIndex)
         result.push(
           <Tile
             key={`${row}-${col}`}
             isDark={isDark}
-            playableTileIndex={isDark ? playableTileIndex : undefined}
+            tileIndex={isDark ? tileIndex : undefined}
             tileState={tileState}
-            onClick={handleTileClick}
+            onPieceClick={handlePieceClick}
             canMovePiece={canMovePiece}
-            isCurrentlySelected={selectedPieceIndex === playableTileIndex}
+            isCurrentlySelected={selectedPieceTileIndex === tileIndex}
+            isMoveDestination={moveDestinations.includes(tileIndex)}
+            onDestinationClick={handleDestinationClick}
           />
         )
-        if (isDark) playableTileIndex++
+        if (isDark) tileIndex++
       }
     }
     return result
-  }, [playableTileStates, selectedPieceIndex, getCanMovePiece, handleTileClick])
+  }, [
+    tileStates,
+    selectedPieceTileIndex,
+    getCanMovePiece,
+    handlePieceClick,
+    handleDestinationClick,
+  ])
 
   return (
     <div

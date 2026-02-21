@@ -2,8 +2,8 @@ import { useState } from 'react'
 import GameBoard from '../components/GameBoard'
 import SearchButton from '../components/SearchButton'
 import useWebSocket from 'react-use-websocket'
-import { PlayerColor } from '../enums'
-import { getNewBoardPlayableTileStates } from '../utils'
+import { PlayerColor, TileState } from '../enums'
+import { getNewBoardTileStates } from '../utils'
 
 const SERVER_WEBSOCKET_URL = 'ws://localhost:3000'
 
@@ -14,8 +14,8 @@ type WebSocketMessage = StartMessage | MoveMessage
 
 const Home = () => {
   // Array with the state of each of the 32 playable dark tiles in the checkers board
-  const [playableTileStates, setPlayableTileStates] = useState<Array<number>>(
-    getNewBoardPlayableTileStates()
+  const [tileStates, setTileStates] = useState<Array<TileState>>(
+    getNewBoardTileStates()
   )
   // Start with the WebSocket connection disabled until the user searches for a game
   const [wsConnectionEnabled, setWsConnectionEnabled] = useState(false)
@@ -72,7 +72,7 @@ const Home = () => {
     <div className="space-y-6">
       <h1>CHECKERED</h1>
       <GameBoard
-        playableTileStates={playableTileStates}
+        tileStates={tileStates}
         playerColor={playerColor}
         isYourTurn={isYourTurn}
       />

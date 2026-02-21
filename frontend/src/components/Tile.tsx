@@ -4,28 +4,32 @@ import Piece from './Piece'
 
 type Props = {
   isDark: boolean
-  playableTileIndex?: number
+  tileIndex?: number
   tileState: TileState
-  onClick: (playableTileIndex: number) => void
+  onPieceClick: (pieceTileIndex: number) => void
   canMovePiece: boolean
   isCurrentlySelected: boolean
+  isMoveDestination: boolean
+  onDestinationClick: (destTileIndex: number) => void
 }
 
 // Individual tile in a checkers board
 const Tile = ({
   isDark,
-  playableTileIndex,
+  tileIndex,
   tileState,
-  onClick,
+  onPieceClick,
   canMovePiece,
   isCurrentlySelected,
+  isMoveDestination,
+  onDestinationClick,
 }: Props) => {
   if (!isDark) {
-    // Light tiles are not playable in a game of checkers
+    // Light tiles are not playable in a game of checkers, no further logic required
     return <div className="bg-[#FFE4C4]"></div>
   }
-  if (playableTileIndex === undefined) {
-    throw new Error('playableTileIndex must be defined for light tiles')
+  if (tileIndex === undefined) {
+    throw new Error('tileIndex must be defined for light tiles')
   }
 
   return (
@@ -34,7 +38,10 @@ const Tile = ({
       onClick={() => {
         if (canMovePiece) {
           // Selected the piece on this tile
-          onClick(playableTileIndex)
+          onPieceClick(tileIndex)
+        } else if (isMoveDestination) {
+          // Selected this tile as the move destination
+          onDestinationClick(tileIndex)
         }
       }}
     >
@@ -45,6 +52,9 @@ const Tile = ({
           showMovableHighlight={canMovePiece}
           showSelectedHighlight={isCurrentlySelected}
         />
+      )}
+      {isMoveDestination && (
+        <div className="h-1/3 w-1/3 rounded-full bg-gray-300 opacity-70"></div>
       )}
     </div>
   )
