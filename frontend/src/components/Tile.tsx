@@ -1,5 +1,5 @@
 import { TileState } from '../enums'
-import { isBlackPiece } from '../utils'
+import { isBlackPiece, isKingPiece } from '../utils'
 import Piece from './Piece'
 
 type Props = {
@@ -7,9 +7,19 @@ type Props = {
   playableTileIndex?: number
   tileState: TileState
   onClick: (playableTileIndex: number) => void
+  canMovePiece: boolean
+  isCurrentlySelected: boolean
 }
 
-const Tile = ({ isDark, playableTileIndex, tileState, onClick }: Props) => {
+// Individual tile in a checkers board
+const Tile = ({
+  isDark,
+  playableTileIndex,
+  tileState,
+  onClick,
+  canMovePiece,
+  isCurrentlySelected,
+}: Props) => {
   if (!isDark) {
     // Light tiles are not playable in a game of checkers
     return <div className="bg-[#FFE4C4]"></div>
@@ -21,10 +31,20 @@ const Tile = ({ isDark, playableTileIndex, tileState, onClick }: Props) => {
   return (
     <div
       className="flex items-center justify-center bg-[#A0522D]"
-      onClick={() => onClick(playableTileIndex)}
+      onClick={() => {
+        if (canMovePiece) {
+          // Selected the piece on this tile
+          onClick(playableTileIndex)
+        }
+      }}
     >
       {tileState !== TileState.EMPTY && (
-        <Piece isBlack={isBlackPiece(tileState)} />
+        <Piece
+          isBlack={isBlackPiece(tileState)}
+          isKing={isKingPiece(tileState)}
+          showMovableHighlight={canMovePiece}
+          showSelectedHighlight={isCurrentlySelected}
+        />
       )}
     </div>
   )

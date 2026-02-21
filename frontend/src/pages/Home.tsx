@@ -71,7 +71,11 @@ const Home = () => {
   return (
     <div className="space-y-6">
       <h1>CHECKERED</h1>
-      <GameBoard playableTileStates={playableTileStates} playerColor={playerColor} isYourTurn />
+      <GameBoard
+        playableTileStates={playableTileStates}
+        playerColor={playerColor}
+        isYourTurn={isYourTurn}
+      />
       {isSearching ? (
         <p>Searching for an opponent...</p>
       ) : (
