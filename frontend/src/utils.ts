@@ -1,4 +1,4 @@
-import { TileState } from './enums'
+import { PlayerColor, TileState } from './enums'
 
 /**
  * Get the starting tile states for each of the 32 playable dark tiles in a checkers board.
@@ -52,23 +52,34 @@ export const tileIndexToCol = (tileIndex: number) => {
 }
 
 /**
- * Get the possible move destinations for a piece.
+ * Get an array of the possible move destinations for the piece at the given tile index.
  */
 export const getPieceMoveDestinations = (
   tileIndex: number,
-  tileStates: Array<number>
-) => {
-  // Must be a piece
+  playerColor: PlayerColor,
+  tileStates: Array<TileState>
+): Array<number> => {
   const tileState = tileStates[tileIndex]
+
+  // Tile must not be empty
   if (tileState === TileState.EMPTY) return []
 
-  const possibleMoves = []
+  // Player must own the piece
+  if (playerColor === PlayerColor.BLACK) {
+    if (!isBlackPiece(tileState)) return []
+  } else {
+    if (isBlackPiece(tileState)) return []
+  }
+
+  // Check the piece's vertical move directions
   const canMoveUp = isBlackPiece(tileState) || isKingPiece(tileState)
   const canMoveDown = !isBlackPiece(tileState) || isKingPiece(tileState)
 
-  // Check if the piece can move upwards
+  const possibleMoves = []
+
+  // Check for upwards moves
   if (canMoveUp) {
-    // Must be below the top row to move down
+    // Must be below the top row to move up
     const row = tileIndexToRow(tileIndex)
     if (row > 0) {
       // Check if pieces are offset one column to the right in this row
@@ -85,9 +96,9 @@ export const getPieceMoveDestinations = (
     }
   }
 
-  // Check if the piece can move downwards
+  // Check for downwards moves
   if (canMoveDown) {
-    // Must be above the bottom row to move up
+    // Must be above the bottom row to move down
     const row = tileIndexToRow(tileIndex)
     if (row < 7) {
       // Check if pieces are offset one column to the right in this row
@@ -104,7 +115,7 @@ export const getPieceMoveDestinations = (
     }
   }
 
-  // Verify the destinations are empty
+  // Verify the move destinations are empty
   const moveDestinations = []
   for (const moveAmount of possibleMoves) {
     const destIndex = tileIndex + moveAmount
@@ -114,19 +125,26 @@ export const getPieceMoveDestinations = (
     }
   }
 
-  // Return the remaining moves
+  // Return the valid moves
   return moveDestinations
 }
 
 /**
- * Checks if the player can move the piece at the given index provided it is currently the palyer's
- * turn and they own the piece.
+ * Gets an array of arrays of valid move destinations for each tile/piece.
  */
-export const canMoveOwnedPieceOnTurn = (
-  tileIndex: number,
-  tileStates: Array<number>
-) => {
-  return (
-    getPieceMoveDestinations(tileIndex, tileStates).length > 0
-  )
+export const getMoveDestinations = (
+  tileStates: Array<TileState>,
+  playerColor: PlayerColor,
+  isYourTurn: boolean
+): Array<Array<number>> => {
+  if (!isYourTurn)
+    // Not your turn so no possible moves, fill with empty arrays
+    return Array.from({ length: tileStates.length }, () => [])
+  const moveDestinations = []
+  for (let tileIndex = 0; tileIndex < tileStates.length; tileIndex++) {
+    moveDestinations.push(
+      getPieceMoveDestinations(tileIndex, playerColor, tileStates)
+    )
+  }
+  return moveDestinations
 }
