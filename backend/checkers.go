@@ -13,12 +13,9 @@ type GameRoom struct {
 	GameState   *Game
 }
 
-// TODO: fill in the
 type GameMove struct {
-	fromX int `json:"from_x"`
-	fromY int `json:"from_y"`
-	toX   int `json:"to_x"`
-	toY   int `json:"to_y"`
+	from int `json:"from"`
+	to   int `json:"to"`
 }
 
 type GameResult struct {
