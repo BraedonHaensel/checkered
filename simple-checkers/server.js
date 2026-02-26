@@ -23,6 +23,8 @@ const webSocketServer = new WebSocket.Server({ server });
 
 // Handle WebSocket connections
 webSocketServer.on('connection', (webSocket) => {
+    console.log('Received connection');
+
     // Add player to queue
     waitingPlayerSockets.push(webSocket);
 

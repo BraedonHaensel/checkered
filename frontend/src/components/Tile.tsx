@@ -1,0 +1,70 @@
+import React from 'react'
+import { TileState } from '../enums'
+import { isBlackPiece, isKingPiece } from '../utils'
+import Piece from './Piece'
+
+type LightTileProps = {
+  tileIndex?: never
+  tileState?: never
+  canSelectPiece?: never
+  isPieceSelected?: never
+  isMoveDestination?: never
+  onClick?: never
+}
+
+type DarkTileProps = {
+  tileIndex: number
+  tileState: TileState
+  canSelectPiece: boolean
+  isPieceSelected: boolean
+  isMoveDestination: boolean
+  onClick: ((tileIndex: number) => void) | undefined
+}
+
+type Props = LightTileProps | DarkTileProps
+
+// Individual tile in a checkers board
+const Tile = React.memo(
+  ({
+    tileIndex,
+    tileState,
+    canSelectPiece,
+    isPieceSelected,
+    isMoveDestination,
+    onClick,
+  }: Props) => {
+    if (tileIndex === undefined) {
+      // Light tiles are not playable in a game of checkers, no further logic required
+      return <div className="bg-[#FFE4C4]"></div>
+    }
+
+    // Check if the tile contains a piece
+    const hasPiece = tileState !== TileState.EMPTY
+    if (hasPiece && isMoveDestination) {
+      throw new Error('Tile has both a piece and a move destination')
+    }
+
+    return (
+      <div
+        className="flex items-center justify-center bg-[#A0522D]"
+        onClick={() => onClick?.(tileIndex)}
+      >
+        {/* Display a checkers piece */}
+        {hasPiece && (
+          <Piece
+            isBlack={isBlackPiece(tileState)}
+            isKing={isKingPiece(tileState)}
+            showSelectableHighlight={canSelectPiece}
+            showSelectedHighlight={isPieceSelected}
+          />
+        )}
+        {/* Display a move destination indicator */}
+        {isMoveDestination && (
+          <div className="h-1/3 w-1/3 rounded-full bg-gray-300 opacity-70"></div>
+        )}
+      </div>
+    )
+  }
+)
+
+export default Tile
