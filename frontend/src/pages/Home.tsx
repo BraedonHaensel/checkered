@@ -9,7 +9,7 @@ const SERVER_WEBSOCKET_URL = 'ws://localhost:3000'
 
 // WebSocket message types
 type StartMessage = { type: 'start'; playerColor: PlayerColor }
-type MoveMessage = { type: 'move' }
+type MoveMessage = { type: 'move'; sourceIndex: number; destIndex: number }
 type WebSocketMessage = StartMessage | MoveMessage
 
 const Home = () => {
@@ -30,6 +30,20 @@ const Home = () => {
     setStatusMessage(isYourTurn ? 'Your turn!' : "Opponent's turn...")
   }
 
+  // Updates tileStates for a piece move
+  const updateTileStatesForPieceMove = (
+    sourceIndex: number,
+    destIndex: number
+  ) => {
+    setTileStates((prev) => {
+      const newTileStates = [...prev]
+      // Move piece from source to dest index
+      newTileStates[destIndex] = prev[sourceIndex]
+      newTileStates[sourceIndex] = TileState.EMPTY
+      return newTileStates
+    })
+  }
+
   // Handle WebSocket messages
   const handleMessage = (message: WebSocketMessage) => {
     if (!message) return
@@ -37,6 +51,7 @@ const Home = () => {
 
     switch (message.type) {
       case 'start':
+        // TODO update when we formalize the format of start messages
         // Game start message
         console.log(`Game started: ${message.playerColor}`)
         setIsSearching(false)
@@ -44,6 +59,14 @@ const Home = () => {
         setPlayerColor(message.playerColor)
         updateIsYourTurn(message.playerColor === PlayerColor.BLACK)
         break
+      case 'move':
+        console.log(
+          `Received move: ${message.sourceIndex} to ${message.destIndex}`
+        )
+        // TODO simple implementation, will likely need more logic
+        setIsYourTurn(true)
+        setStatusMessage('Your turn!')
+        updateTileStatesForPieceMove(message.sourceIndex, message.destIndex)
     }
   }
 
@@ -68,6 +91,20 @@ const Home = () => {
     setWsConnectionEnabled(true)
   }
 
+  const handlePieceMove = (sourceIndex: number, destIndex: number) => {
+    console.info(`Moving piece from ${sourceIndex} to ${destIndex}`)
+    // TODO update when we formalize the format of move messages
+    sendJsonMessage({
+      type: 'move',
+      sourceIndex,
+      destIndex,
+    })
+    // TODO simple implementation, will likely need more logic
+    setIsYourTurn(false)
+    setStatusMessage("Opponent's turn...")
+    updateTileStatesForPieceMove(sourceIndex, destIndex)
+  }
+
   return (
     <div className="space-y-6">
       <h1>CHECKERED</h1>
@@ -75,6 +112,7 @@ const Home = () => {
         tileStates={tileStates}
         playerColor={playerColor}
         isYourTurn={isYourTurn}
+        onPieceMove={handlePieceMove}
       />
       {isSearching ? (
         <p>Searching for an opponent...</p>

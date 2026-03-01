@@ -7,10 +7,16 @@ type Props = {
   tileStates: Array<number> // Array with the state of each of the 32 playable dark tiles in the checkers board
   playerColor: PlayerColor
   isYourTurn: boolean
+  onPieceMove: (sourceIndex: number, destIndex: number) => void
 }
 
 // Checkers game board
-const GameBoard = ({ tileStates, playerColor, isYourTurn }: Props) => {
+const GameBoard = ({
+  tileStates,
+  playerColor,
+  isYourTurn,
+  onPieceMove,
+}: Props) => {
   const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
 
   useEffect(() => {
@@ -48,13 +54,20 @@ const GameBoard = ({ tileStates, playerColor, isYourTurn }: Props) => {
         return
       }
 
-      if (selectedPieceMoveDestinations.includes(tileIndex)) {
-        // Selected a move destination for the currently selected piece
-        // TODO Handle piece movement (here or separate method)
-        console.log(`Moving piece from ${selectedPieceIndex} to ${tileIndex}`)
+      if (
+        selectedPieceIndex &&
+        selectedPieceMoveDestinations.includes(tileIndex)
+      ) {
+        // Destination tile clicked. Handle moving the piece in the parent
+        onPieceMove(selectedPieceIndex, tileIndex)
       }
     },
-    [selectedPieceIndex, moveDestinations, selectedPieceMoveDestinations]
+    [
+      selectedPieceIndex,
+      moveDestinations,
+      selectedPieceMoveDestinations,
+      onPieceMove,
+    ]
   )
 
   // Populate the checkers board tiles
