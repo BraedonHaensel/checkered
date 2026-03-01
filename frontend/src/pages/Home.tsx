@@ -14,7 +14,7 @@ type WebSocketMessage = StartMessage | MoveMessage
 
 const Home = () => {
   // Array with the state of each of the 32 playable dark tiles in the checkers board
-  const [tileStates, setTileStates] = useState<Array<TileState>>(
+  const [tileStates, setTileStates] = useState<TileState[]>(
     getNewBoardTileStates()
   )
   // Start with the WebSocket connection disabled until the user searches for a game

@@ -4,7 +4,7 @@ import { PlayerColor } from '../enums'
 import { getMoveDestinations } from '../utils'
 
 type Props = {
-  tileStates: Array<number> // Array with the state of each of the 32 playable dark tiles in the checkers board
+  tileStates: number[] // Array with the state of each of the 32 playable dark tiles in the checkers board
   playerColor: PlayerColor
   isYourTurn: boolean
   onPieceMove: (sourceIndex: number, destIndex: number) => void

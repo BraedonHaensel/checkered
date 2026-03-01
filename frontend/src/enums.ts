@@ -14,3 +14,12 @@ export const TileState = {
   BLACK_KING_PIECE: 4,
 }
 export type TileState = (typeof TileState)[keyof typeof TileState]
+
+// Move directions
+export const MoveDirection = {
+  UP_LEFT: 0,
+  UP_RIGHT: 1,
+  DOWN_LEFT: 2,
+  DOWN_RIGHT: 3,
+}
+export type MoveDirection = (typeof MoveDirection)[keyof typeof MoveDirection]
