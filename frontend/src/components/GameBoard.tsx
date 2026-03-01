@@ -55,7 +55,7 @@ const GameBoard = ({
       }
 
       if (
-        selectedPieceIndex &&
+        selectedPieceIndex !== undefined &&
         selectedPieceMoveDestinations.includes(tileIndex)
       ) {
         // Destination tile clicked. Handle moving the piece in the parent
@@ -100,6 +100,7 @@ const GameBoard = ({
             key={tileKey}
             tileIndex={tileIndex}
             tileState={tileStates[tileIndex]}
+            playerColor={playerColor}
             canSelectPiece={canSelectPiece}
             isPieceSelected={selectedPieceIndex === tileIndex}
             isMoveDestination={isMoveDestination}
@@ -116,6 +117,7 @@ const GameBoard = ({
     return result
   }, [
     tileStates,
+    playerColor,
     moveDestinations,
     selectedPieceIndex,
     selectedPieceMoveDestinations,

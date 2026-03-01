@@ -24,6 +24,16 @@ export const isBlackPiece = (tileState: TileState) => {
 }
 
 /**
+ * Checks if the given tileState is for a standard piece.
+ */
+export const isStandardPiece = (tileState: TileState) => {
+  return [
+    TileState.BLACK_STANDARD_PIECE,
+    TileState.RED_STANDARD_PIECE,
+  ].includes(tileState)
+}
+
+/**
  * Checks if the given tileState is for a king piece.
  */
 export const isKingPiece = (tileState: TileState) => {
@@ -38,6 +48,13 @@ export const isKingPiece = (tileState: TileState) => {
 export const tileIndexToRow = (tileIndex: number) => {
   // 4 playable tiles per row
   return Math.floor(tileIndex / 4)
+}
+
+/**
+ * Checks if the row number is for an offset row (rows where the dark tiles are shifted right by one tile).
+ */
+export const isOffsetRow = (row: number) => {
+  return row % 2 === 0
 }
 
 /**
@@ -73,22 +90,47 @@ export const isJumpMove = (sourceIndex: number, destIndex: number) => {
 const getMoveAmountForDirection = (
   direction: MoveDirection,
   isOffsetRow: boolean,
-  isDoubleJump: boolean = false
+  isJump: boolean = false
 ) => {
   if (isUpwardMoveDirection(direction)) {
     if (isLeftwardMoveDirection(direction)) {
       // Up left move
-      return isDoubleJump ? -9 : isOffsetRow ? -4 : -5
+      return isJump ? -9 : isOffsetRow ? -4 : -5
     }
     // Up right move
-    return isDoubleJump ? -7 : isOffsetRow ? -3 : -4
+    return isJump ? -7 : isOffsetRow ? -3 : -4
   }
   if (isLeftwardMoveDirection(direction)) {
     // Down left move
-    return isDoubleJump ? 7 : isOffsetRow ? 4 : 3
+    return isJump ? 7 : isOffsetRow ? 4 : 3
   }
   // Down right move
-  return isDoubleJump ? 9 : isOffsetRow ? 5 : 4
+  return isJump ? 9 : isOffsetRow ? 5 : 4
+}
+
+// Gets the index of the jumped piece from a jump move.
+export const getJumpedIndex = (sourceIndex: number, destIndex: number) => {
+  if (!isJumpMove(sourceIndex, destIndex)) throw new Error('Invalid jump move')
+
+  // Get the move direction of the jump
+  const moveAmount = destIndex - sourceIndex
+  const moveDirection =
+    moveAmount === -9
+      ? MoveDirection.UP_LEFT
+      : moveAmount === -7
+        ? MoveDirection.UP_RIGHT
+        : moveAmount === 7
+          ? MoveDirection.DOWN_LEFT
+          : MoveDirection.DOWN_RIGHT
+
+  // Return the index of the jumped tile
+  return (
+    sourceIndex +
+    getMoveAmountForDirection(
+      moveDirection,
+      isOffsetRow(tileIndexToRow(sourceIndex))
+    )
+  )
 }
 
 // Gets the destination tile index for a move in the given direction, or undefined if the piece
@@ -108,19 +150,26 @@ const getMoveDestinationInDirection = (
   // Check column boundaries
   const col = tileIndexToCol(tileIndex)
   const isLeftward = isLeftwardMoveDirection(direction)
-  if (isLeftward && col === 0) return undefined // Can't move left from the leftmost col
-  if (!isLeftward && col === 7) return undefined // Can't move right from the rightmost col
-
-  // Check if this is an offset row (rows where the dark tiles are shifted right by one tile).
-  // The amount to change the tile index by depends on whether the piece is from an offset row
-  const isOffsetRow = row % 2 === 0
+  if (isLeftward && col === 0) return undefined // Can't move left from the leftmost column
+  if (!isLeftward && col === 7) return undefined // Can't move right from the rightmost column
 
   // Get the tile index change amount for a move in this direction
-  let moveAmount = getMoveAmountForDirection(direction, isOffsetRow)
+  let moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row))
   let destIndex = tileIndex + moveAmount
 
   // Check if the destination tile is empty
-  if (tileStates[destIndex] === TileState.EMPTY) return destIndex
+  if (tileStates[destIndex] === TileState.EMPTY) {
+    // Standard move, return the dest index
+    return destIndex
+  }
+
+  // Check row boundaries again for jump moves
+  if (isUpward && row <= 1) return undefined // Can't jump upward from the top 2 rows
+  if (!isUpward && row >= 6) return undefined // Can't jump downward from the botttom 2 rows
+
+  // Check column boundaries again for jump moves
+  if (isLeftward && col <= 1) return undefined // Can't move left from the leftmost 2 columns
+  if (!isLeftward && col >= 6) return undefined // Can't move right from the rightmost 2 columns
 
   // Check the player and piece colors
   const isBlackPlayer = playerColor === PlayerColor.BLACK
@@ -130,8 +179,8 @@ const getMoveDestinationInDirection = (
   if (isBlackPlayer && isJumpingBlackPiece) return undefined
   if (!isBlackPlayer && !isJumpingBlackPiece) return undefined
 
-  // Get the tile index change amount for a double jump move in this direction
-  moveAmount = getMoveAmountForDirection(direction, isOffsetRow, true)
+  // Get the tile index change amount for a jump move in this direction
+  moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row), true)
 
   // Check if the destination tile is empty
   destIndex = tileIndex + moveAmount
@@ -187,7 +236,20 @@ export const getPieceMoveDestinations = (
 }
 
 /**
- * Gets an array of arrays of valid move destinations for each tile/piece.
+ * Checks if a list of moves contains a jump move.
+ */
+export const containsJumpMove = (
+  tileIndex: number,
+  moveDestinations: number[]
+): boolean => {
+  return (
+    moveDestinations.find((destIndex) => isJumpMove(tileIndex, destIndex)) !==
+    undefined
+  )
+}
+
+/**
+ * Gets a list of lists of of valid move destinations for each tile/piece.
  */
 export const getMoveDestinations = (
   tileStates: TileState[],
@@ -207,11 +269,11 @@ export const getMoveDestinations = (
   }
 
   // Force jump moves if available
-  const containsJumpMove =
+  const containsJump =
     moveDestinations.find((destinations, tileIndex) =>
-      destinations.find((destIndex) => isJumpMove(tileIndex, destIndex))
+      containsJumpMove(tileIndex, destinations)
     ) !== undefined
-  if (containsJumpMove) {
+  if (containsJump) {
     moveDestinations = moveDestinations.map((destinations, tileIndex) =>
       destinations.filter((destIndex) => isJumpMove(tileIndex, destIndex))
     )

@@ -3,7 +3,16 @@ import GameBoard from '../components/GameBoard'
 import SearchButton from '../components/SearchButton'
 import useWebSocket from 'react-use-websocket'
 import { PlayerColor, TileState } from '../enums'
-import { getNewBoardTileStates } from '../utils'
+import {
+  getNewBoardTileStates,
+  isJumpMove,
+  isStandardPiece,
+  getJumpedIndex,
+  tileIndexToRow,
+  isBlackPiece,
+  getMoveDestinations,
+  containsJumpMove,
+} from '../utils'
 
 const SERVER_WEBSOCKET_URL = 'ws://localhost:3000'
 
@@ -35,11 +44,50 @@ const Home = () => {
     sourceIndex: number,
     destIndex: number
   ) => {
+    let newDestTileState = tileStates[sourceIndex]
+    if (isStandardPiece(tileStates[sourceIndex])) {
+      // Check for a promotion from a standard to crown piece
+      const isBlack = isBlackPiece(newDestTileState)
+      const destRow = tileIndexToRow(destIndex)
+      if (isBlack && destRow === 0) {
+        newDestTileState = TileState.BLACK_KING_PIECE
+      } else if (!isBlack && destRow === 7) {
+        newDestTileState = TileState.RED_KING_PIECE
+      }
+    }
+
     setTileStates((prev) => {
       const newTileStates = [...prev]
+
       // Move piece from source to dest index
-      newTileStates[destIndex] = prev[sourceIndex]
+      newTileStates[destIndex] = newDestTileState
       newTileStates[sourceIndex] = TileState.EMPTY
+
+      // If this is a jump move, remove the jumped piece and potentially continue jumping
+      if (isJumpMove(sourceIndex, destIndex)) {
+        const jumpedIndex = getJumpedIndex(sourceIndex, destIndex)
+        newTileStates[jumpedIndex] = TileState.EMPTY
+
+        const opponentColor =
+          playerColor === PlayerColor.BLACK
+            ? PlayerColor.RED
+            : PlayerColor.BLACK
+
+        // Check the new move destinations for a jump move for the current player
+        const newMoveDestinations = getMoveDestinations(
+          newTileStates,
+          isYourTurn ? playerColor : opponentColor,
+          true
+        )
+        if (!containsJumpMove(destIndex, newMoveDestinations[destIndex])) {
+          // Piece can't continue jumping, change the current player's turn
+          updateIsYourTurn(!isYourTurn)
+        }
+      } else {
+        // Normal move, change the current player's turn
+        updateIsYourTurn(!isYourTurn)
+      }
+
       return newTileStates
     })
   }
@@ -64,8 +112,6 @@ const Home = () => {
           `Received move: ${message.sourceIndex} to ${message.destIndex}`
         )
         // TODO simple implementation, will likely need more logic
-        setIsYourTurn(true)
-        setStatusMessage('Your turn!')
         updateTileStatesForPieceMove(message.sourceIndex, message.destIndex)
     }
   }
@@ -100,8 +146,6 @@ const Home = () => {
       destIndex,
     })
     // TODO simple implementation, will likely need more logic
-    setIsYourTurn(false)
-    setStatusMessage("Opponent's turn...")
     updateTileStatesForPieceMove(sourceIndex, destIndex)
   }
 
