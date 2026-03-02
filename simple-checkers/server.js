@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const cors = require("cors");
 const WebSocket = require('ws');
 const path = require('path');
 
@@ -14,6 +15,7 @@ const app = express();
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors());
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -98,3 +100,15 @@ webSocketServer.on('connection', (webSocket) => {
 server.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}.`);
 });
+
+app.get("/api/get_leaderboard", (req, res) => {
+    res.json({
+        type: "get_leaderboard",
+        leaderboard: [
+            {
+                "name": "Test",
+                "wl_ratio": 0.5,
+            }
+        ]
+    })
+})

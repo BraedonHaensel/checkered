@@ -30,7 +30,7 @@ export class Backend {
     private constructor() {
     }
 
-    public async get<RequestType extends Request>(type: RequestType["type"], payload: RequestType): Promise<Response & {type: RequestType["type"]}>  {
+    public async get<RequestType extends Request["type"]>(type: RequestType, payload: Omit<Extract<Request, {type: RequestType}>, "type">): Promise<Extract<Response, {type: RequestType}>> {
         const url = `${this.server().apiUrl}/${type}`;
         const raw = await fetch(url, {
             body: Object.keys(payload).length > 0 ? JSON.stringify(payload) : null,
@@ -40,10 +40,10 @@ export class Backend {
             method: "GET",
         });
 
-        return await raw.json() as Response;
+        return await raw.json() as Extract<Response, {type: RequestType}>;
     }
 
-    public async post<RequestType extends Request>(type: RequestType["type"], payload: RequestType): Promise<Response & {type: RequestType["type"]}> {
+    public async post<RequestType extends Request["type"]>(type: RequestType, payload: Omit<Extract<Request, {type: RequestType}>, "type">): Promise<Extract<Response, {type: RequestType}>> {
         const url = `${this.server().apiUrl}/${type}`;
         const raw = await fetch(url, {
             body: Object.keys(payload).length > 0 ? JSON.stringify(payload) : null,
@@ -53,7 +53,7 @@ export class Backend {
             method: "POST",
         });
 
-        return await raw.json() as Response;
+        return await raw.json() as Extract<Response, {type: RequestType}>;
     }
 
     private findServers() {
