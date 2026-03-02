@@ -11,7 +11,7 @@ import (
 
 type Client struct {
 	// uuid for client
-	uuid uuid.UUID
+	Uuid uuid.UUID
 	// chosen username for user
 	username string
 	// connection
@@ -26,6 +26,8 @@ type Client struct {
 
 	// used to send messages to the client via websocket
 	send chan []byte
+	// used to send new moves to the client
+	moveSender chan<- GameMove
 }
 
 type ClientMessage struct {
@@ -64,8 +66,8 @@ func decodePayload(data []byte) (interface{}, error) {
 
 // message that is sent to the client when a game has been found
 type FoundGame struct {
-	GameID           string `json:"game_id"`
-	StartingPosition string `json:"starting_position"`
+	GameID string `json:"game_id"`
+	Side   string `json:"side"`
 }
 
 func (c *Client) writeThread() {
@@ -111,15 +113,16 @@ func (c *Client) handleNewMove(p GameMove) {
 	panic("unimplemented")
 }
 
-func NewClient(connection *websocket.Conn) Client {
+func NewClient(connection *websocket.Conn, moveSend chan<- GameMove) Client {
 	c := Client{
-		uuid: uuid.New(),
+		Uuid: uuid.New(),
 		// TODO: figure out how to handle new usernames
-		username: "",
-		conn:     connection,
-		status:   IDLE,
-		gameId:   "",
-		send:     make(chan []byte),
+		username:   "",
+		conn:       connection,
+		status:     IDLE,
+		gameId:     "",
+		send:       make(chan []byte),
+		moveSender: moveSend,
 	}
 	return c
 }

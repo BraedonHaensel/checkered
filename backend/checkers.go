@@ -1,5 +1,9 @@
 package main
 
+import (
+	"github.com/google/uuid"
+)
+
 type Game struct {
 	gameID      string
 	redPlayer   string
@@ -13,9 +17,36 @@ type GameRoom struct {
 	GameState   *Game
 }
 
+func (gameRoom *GameRoom) playMove(gameMove GameMove) {
+	panic("unimplemented")
+}
+
+func (gameRoom *GameRoom) isValidMove(gameMove GameMove) bool {
+	panic("unimplemented")
+}
+
+func (gameRoom *GameRoom) messageFromNewGame(playerKind string) FoundGame {
+	return FoundGame{
+		GameID: gameRoom.gameID,
+		Side:   playerKind,
+	}
+}
+
+func otherPlayer(playerKind string) string {
+	if playerKind == "red" {
+		return "black"
+	}
+	if playerKind == "black" {
+		return "red"
+	}
+	return "error"
+}
+
 type GameMove struct {
-	from int `json:"from"`
-	to   int `json:"to"`
+	GameID uuid.UUID `json:"game_id"`
+	UserID uuid.UUID `json:"user_id"`
+	From   int       `json:"from"`
+	To     int       `json:"to"`
 }
 
 type GameResult struct {
