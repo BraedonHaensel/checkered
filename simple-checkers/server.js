@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 
 // Create WebSocket server
-const webSocketServer = new WebSocket.Server({ server });
+const webSocketServer = new WebSocket.Server({ server, path: "/ws" });
 
 // Handle WebSocket connections
 webSocketServer.on('connection', (webSocket) => {
@@ -49,7 +49,7 @@ webSocketServer.on('connection', (webSocket) => {
             player.send(
                 JSON.stringify({
                     type: 'start',
-                    playerColor: player === game.redPlayer ? 'red' : 'black',
+                    player_colour: player === game.redPlayer ? 'red' : 'black',
                 }),
             );
         }
@@ -68,16 +68,16 @@ webSocketServer.on('connection', (webSocket) => {
                 game.redPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        sourceIndex: data.sourceIndex,
-                        destIndex: data.destIndex,
+                        source: data.source,
+                        destination: data.destination,
                     }),
                 );
             } else {
                 game.blackPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        sourceIndex: data.sourceIndex,
-                        destIndex: data.destIndex,
+                        source: data.source,
+                        destination: data.destination,
                     }),
                 );
             }
@@ -89,7 +89,9 @@ webSocketServer.on('connection', (webSocket) => {
         waitingPlayerSockets = waitingPlayerSockets.filter(
             (player) => player !== webSocket,
         );
+        console.log("Disconnected.")
     });
+    webSocket.on('error', (err) => console.error('WebSocket error:', err));
 });
 
 // Start listening for server connections
