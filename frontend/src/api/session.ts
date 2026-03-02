@@ -1,21 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Message } from "./message";
 import { Backend } from "./backend";
 
 export class Session {
 
     private handlers: Record<string, Array<(msg: any) => void>> = {};
-    private ws: WebSocket
+    private ws: WebSocket | null = null;
 
-    public constructor(ws: WebSocket) {
-        this.ws = ws;
-        this.ws.addEventListener("error", (err) => {
-            console.error("An error occurred in the websocket connection!", err);
-
-        })
-        this.ws.addEventListener("message", (event: MessageEvent<any>) => {
-            this.onmessage(event);
-        })
+    public constructor() {
     }
 
     private onmessage(event: MessageEvent<any>) {
@@ -36,16 +28,29 @@ export class Session {
         this.handlers[type].push(handler);
     }
 
+    public connect(ws: WebSocket) {
+        this.ws = ws;
+        this.ws.addEventListener("message", (event: MessageEvent<any>) => {
+            this.onmessage(event);
+        })
+    }
+
     public send(msg: Message): void {
+        if(!this.ws) {
+            return;
+        } 
         this.ws.send(JSON.stringify(msg));
     }
 
     public end(): void {
+        if(!this.ws) {
+            return;
+        } 
         this.ws.close();
     }
 
     public connected(): boolean {
-        return this.ws.readyState === this.ws.OPEN;
+        return this.ws !== null && this.ws.readyState === this.ws.OPEN;
     }
 }
 
