@@ -1,4 +1,4 @@
-import { PlayerColor, TileState } from './enums'
+import { MoveDirection, PlayerColor, TileState } from './enums'
 
 /**
  * Get the starting tile states for each of the 32 playable dark tiles in a checkers board.
@@ -24,6 +24,16 @@ export const isBlackPiece = (tileState: TileState) => {
 }
 
 /**
+ * Checks if the given tileState is for a standard piece.
+ */
+export const isStandardPiece = (tileState: TileState) => {
+  return [
+    TileState.BLACK_STANDARD_PIECE,
+    TileState.RED_STANDARD_PIECE,
+  ].includes(tileState)
+}
+
+/**
  * Checks if the given tileState is for a king piece.
  */
 export const isKingPiece = (tileState: TileState) => {
@@ -41,6 +51,13 @@ export const tileIndexToRow = (tileIndex: number) => {
 }
 
 /**
+ * Checks if the row number is for an offset row (rows where the dark tiles are shifted right by one tile).
+ */
+export const isOffsetRow = (row: number) => {
+  return row % 2 === 0
+}
+
+/**
  * Returns the column number given a piece's tile index.
  */
 export const tileIndexToCol = (tileIndex: number) => {
@@ -51,17 +68,139 @@ export const tileIndexToCol = (tileIndex: number) => {
   return col + offset
 }
 
+// Check if a move is upward, otherwise it is downward.
+export const isUpwardMoveDirection = (moveDirection: MoveDirection) => {
+  return [MoveDirection.UP_LEFT, MoveDirection.UP_RIGHT].includes(moveDirection)
+}
+
+// Check if a move is leftward, otherwise it is upward.
+export const isLeftwardMoveDirection = (moveDirection: MoveDirection) => {
+  return [MoveDirection.UP_LEFT, MoveDirection.DOWN_LEFT].includes(
+    moveDirection
+  )
+}
+
+// Checks if a move from the source to dest index is a jump move
+export const isJumpMove = (sourceIndex: number, destIndex: number) => {
+  // Only jump moves can change a tile index by 7 or more
+  return Math.abs(destIndex - sourceIndex) >= 7
+}
+
+// Gets the tile index change amount required to move a piece in the given direction.
+const getMoveAmountForDirection = (
+  direction: MoveDirection,
+  isOffsetRow: boolean,
+  isJump: boolean = false
+) => {
+  if (isUpwardMoveDirection(direction)) {
+    if (isLeftwardMoveDirection(direction)) {
+      // Up left move
+      return isJump ? -9 : isOffsetRow ? -4 : -5
+    }
+    // Up right move
+    return isJump ? -7 : isOffsetRow ? -3 : -4
+  }
+  if (isLeftwardMoveDirection(direction)) {
+    // Down left move
+    return isJump ? 7 : isOffsetRow ? 4 : 3
+  }
+  // Down right move
+  return isJump ? 9 : isOffsetRow ? 5 : 4
+}
+
+// Gets the index of the jumped piece from a jump move.
+export const getJumpedIndex = (sourceIndex: number, destIndex: number) => {
+  if (!isJumpMove(sourceIndex, destIndex)) throw new Error('Invalid jump move')
+
+  // Get the move direction of the jump
+  const moveAmount = destIndex - sourceIndex
+  const moveDirection =
+    moveAmount === -9
+      ? MoveDirection.UP_LEFT
+      : moveAmount === -7
+        ? MoveDirection.UP_RIGHT
+        : moveAmount === 7
+          ? MoveDirection.DOWN_LEFT
+          : MoveDirection.DOWN_RIGHT
+
+  // Return the index of the jumped tile
+  return (
+    sourceIndex +
+    getMoveAmountForDirection(
+      moveDirection,
+      isOffsetRow(tileIndexToRow(sourceIndex))
+    )
+  )
+}
+
+// Gets the destination tile index for a move in the given direction, or undefined if the piece
+// can't move in the given direction
+const getMoveDestinationInDirection = (
+  tileIndex: number,
+  playerColor: PlayerColor,
+  tileStates: TileState[],
+  direction: MoveDirection
+): number | undefined => {
+  // Check row boundaries
+  const row = tileIndexToRow(tileIndex)
+  const isUpward = isUpwardMoveDirection(direction)
+  if (isUpward && row === 0) return undefined // Can't move upward from the top row
+  if (!isUpward && row === 7) return undefined // Can't move downward from the bottom row
+
+  // Check column boundaries
+  const col = tileIndexToCol(tileIndex)
+  const isLeftward = isLeftwardMoveDirection(direction)
+  if (isLeftward && col === 0) return undefined // Can't move left from the leftmost column
+  if (!isLeftward && col === 7) return undefined // Can't move right from the rightmost column
+
+  // Get the tile index change amount for a move in this direction
+  let moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row))
+  let destIndex = tileIndex + moveAmount
+
+  // Check if the destination tile is empty
+  if (tileStates[destIndex] === TileState.EMPTY) {
+    // Standard move, return the dest index
+    return destIndex
+  }
+
+  // Check row boundaries again for jump moves
+  if (isUpward && row <= 1) return undefined // Can't jump upward from the top 2 rows
+  if (!isUpward && row >= 6) return undefined // Can't jump downward from the botttom 2 rows
+
+  // Check column boundaries again for jump moves
+  if (isLeftward && col <= 1) return undefined // Can't move left from the leftmost 2 columns
+  if (!isLeftward && col >= 6) return undefined // Can't move right from the rightmost 2 columns
+
+  // Check the player and piece colors
+  const isBlackPlayer = playerColor === PlayerColor.BLACK
+  const isJumpingBlackPiece = isBlackPiece(tileStates[destIndex])
+
+  // Can't jump your own piece
+  if (isBlackPlayer && isJumpingBlackPiece) return undefined
+  if (!isBlackPlayer && !isJumpingBlackPiece) return undefined
+
+  // Get the tile index change amount for a jump move in this direction
+  moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row), true)
+
+  // Check if the destination tile is empty
+  destIndex = tileIndex + moveAmount
+  if (tileStates[destIndex] === TileState.EMPTY) return destIndex
+
+  // No possible moves
+  return undefined
+}
+
 /**
  * Get an array of the possible move destinations for the piece at the given tile index.
  */
 export const getPieceMoveDestinations = (
   tileIndex: number,
   playerColor: PlayerColor,
-  tileStates: Array<TileState>
-): Array<number> => {
+  tileStates: TileState[]
+): number[] => {
   const tileState = tileStates[tileIndex]
 
-  // Tile must not be empty
+  // Source tile must not be empty
   if (tileState === TileState.EMPTY) return []
 
   // Player must own the piece
@@ -71,80 +210,74 @@ export const getPieceMoveDestinations = (
     if (isBlackPiece(tileState)) return []
   }
 
-  // Check the piece's vertical move directions
-  const canMoveUp = isBlackPiece(tileState) || isKingPiece(tileState)
-  const canMoveDown = !isBlackPiece(tileState) || isKingPiece(tileState)
-
-  const possibleMoves = []
-
-  // Check for upwards moves
-  if (canMoveUp) {
-    // Must be below the top row to move up
-    const row = tileIndexToRow(tileIndex)
-    if (row > 0) {
-      // Check if pieces are offset one column to the right in this row
-      const isOffsetRow = row % 2 === 0
-      const col = tileIndexToCol(tileIndex)
-      if (col > 0) {
-        // Can move up-left
-        possibleMoves.push(isOffsetRow ? -4 : -5)
-      }
-      if (col < 7) {
-        // Can move up-right
-        possibleMoves.push(isOffsetRow ? -3 : -4)
-      }
-    }
+  // Move directions to try
+  const moveDirections: MoveDirection[] = []
+  if (isBlackPiece(tileState) || isKingPiece(tileState)) {
+    // Try moving upwards
+    moveDirections.push(MoveDirection.UP_LEFT, MoveDirection.UP_RIGHT)
+  }
+  if (!isBlackPiece(tileState) || isKingPiece(tileState)) {
+    // Try moving downwards
+    moveDirections.push(MoveDirection.DOWN_LEFT, MoveDirection.DOWN_RIGHT)
   }
 
-  // Check for downwards moves
-  if (canMoveDown) {
-    // Must be above the bottom row to move down
-    const row = tileIndexToRow(tileIndex)
-    if (row < 7) {
-      // Check if pieces are offset one column to the right in this row
-      const isOffsetRow = row % 2 === 0
-      const col = tileIndexToCol(tileIndex)
-      if (col > 0) {
-        // Can move down-left
-        possibleMoves.push(isOffsetRow ? 4 : 3)
-      }
-      if (col < 7) {
-        // Can move down-right
-        possibleMoves.push(isOffsetRow ? 5 : 4)
-      }
-    }
-  }
-
-  // Verify the move destinations are empty
+  // Get the valid move destinations
   const moveDestinations = []
-  for (const moveAmount of possibleMoves) {
-    const destIndex = tileIndex + moveAmount
-    if (tileStates[destIndex] === TileState.EMPTY) {
-      // Destination is empty, can move piece
-      moveDestinations.push(destIndex)
-    }
+  for (const moveDirection of moveDirections) {
+    const destIndex = getMoveDestinationInDirection(
+      tileIndex,
+      playerColor,
+      tileStates,
+      moveDirection
+    )
+    if (destIndex !== undefined) moveDestinations.push(destIndex)
   }
-
-  // Return the valid moves
   return moveDestinations
 }
 
 /**
- * Gets an array of arrays of valid move destinations for each tile/piece.
+ * Checks if a list of moves contains a jump move.
+ */
+export const containsJumpMove = (
+  tileIndex: number,
+  moveDestinations: number[]
+): boolean => {
+  return (
+    moveDestinations.find((destIndex) => isJumpMove(tileIndex, destIndex)) !==
+    undefined
+  )
+}
+
+/**
+ * Gets a list of lists of of valid move destinations for each tile/piece.
  */
 export const getMoveDestinations = (
-  tileStates: Array<TileState>,
+  tileStates: TileState[],
   playerColor: PlayerColor,
   isYourTurn: boolean
-): Array<Array<number>> => {
+): number[][] => {
   if (!isYourTurn)
     // Not your turn so no possible moves, fill with empty arrays
     return Array.from({ length: tileStates.length }, () => [])
-  const moveDestinations = []
+
+  // Get the move destinations for each tile index
+  let moveDestinations: number[][] = []
   for (let tileIndex = 0; tileIndex < tileStates.length; tileIndex++) {
     moveDestinations.push(
       getPieceMoveDestinations(tileIndex, playerColor, tileStates)
     )
   }
+
+  // Force jump moves if available
+  const containsJump =
+    moveDestinations.find((destinations, tileIndex) =>
+      containsJumpMove(tileIndex, destinations)
+    ) !== undefined
+  if (containsJump) {
+    moveDestinations = moveDestinations.map((destinations, tileIndex) =>
+      destinations.filter((destIndex) => isJumpMove(tileIndex, destIndex))
+    )
+  }
+
   return moveDestinations
 }

@@ -55,6 +55,35 @@ webSocketServer.on('connection', (webSocket) => {
         }
     }
 
+    webSocket.on('message', (message) => {
+        const data = JSON.parse(message);
+        console.log(`Received move: ${data.sourceIndex} to ${data.destIndex}`);
+        const game = activeGames.find((g) =>
+            [g.blackPlayer, g.redPlayer].includes(webSocket),
+        );
+
+        if (data.type === 'move' && game && !game.gameOver) {
+            // TODO simple demo, real implementation needs to do way more!
+            if (game.blackPlayer === webSocket) {
+                game.redPlayer.send(
+                    JSON.stringify({
+                        type: 'move',
+                        sourceIndex: data.sourceIndex,
+                        destIndex: data.destIndex,
+                    }),
+                );
+            } else {
+                game.blackPlayer.send(
+                    JSON.stringify({
+                        type: 'move',
+                        sourceIndex: data.sourceIndex,
+                        destIndex: data.destIndex,
+                    }),
+                );
+            }
+        }
+    });
+
     webSocket.on('close', () => {
         // Remove from the queue if present
         waitingPlayerSockets = waitingPlayerSockets.filter(

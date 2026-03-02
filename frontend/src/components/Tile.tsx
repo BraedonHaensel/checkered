@@ -1,11 +1,12 @@
 import React from 'react'
-import { TileState } from '../enums'
+import { PlayerColor, TileState } from '../enums'
 import { isBlackPiece, isKingPiece } from '../utils'
 import Piece from './Piece'
 
 type LightTileProps = {
   tileIndex?: never
   tileState?: never
+  playerColor?: never
   canSelectPiece?: never
   isPieceSelected?: never
   isMoveDestination?: never
@@ -15,6 +16,7 @@ type LightTileProps = {
 type DarkTileProps = {
   tileIndex: number
   tileState: TileState
+  playerColor: PlayerColor
   canSelectPiece: boolean
   isPieceSelected: boolean
   isMoveDestination: boolean
@@ -28,6 +30,7 @@ const Tile = React.memo(
   ({
     tileIndex,
     tileState,
+    playerColor,
     canSelectPiece,
     isPieceSelected,
     isMoveDestination,
@@ -46,7 +49,11 @@ const Tile = React.memo(
 
     return (
       <div
-        className="flex items-center justify-center bg-[#A0522D]"
+        className={
+          'flex items-center justify-center bg-[#A0522D] ' +
+          // The board is rotated 180 for the red player's POV, so counter-rotate each tile back 180
+          `${playerColor === PlayerColor.RED && 'rotate-180'}`
+        }
         onClick={() => onClick?.(tileIndex)}
       >
         {/* Display a checkers piece */}
