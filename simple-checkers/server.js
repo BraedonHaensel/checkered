@@ -59,7 +59,7 @@ webSocketServer.on('connection', (webSocket) => {
 
     webSocket.on('message', (message) => {
         const data = JSON.parse(message);
-        console.log(`Received move: ${data.sourceIndex} to ${data.destIndex}`);
+        console.log(`Received move: ${data.source} to ${data.destination}`);
         const game = activeGames.find((g) =>
             [g.blackPlayer, g.redPlayer].includes(webSocket),
         );

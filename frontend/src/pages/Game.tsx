@@ -13,12 +13,12 @@ import {
 } from '../utils'
 import { useSession } from '../api/session'
 
-const Game = () => {
+const Game = ({user}: {user: string}) => {
     // Array with the state of each of the 32 playable dark tiles in the checkers board
     const [tileStates, setTileStates] = useState<TileState[]>(
         getNewBoardTileStates()
     )
-    const session = useSession();
+    const session = useSession(user);
     // Start with the WebSocket connection disabled until the user searches for a game
     const [isInGame, setIsInGame] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>()

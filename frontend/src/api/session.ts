@@ -55,13 +55,14 @@ export class Session {
 }
 
 export const useSession = (
+    user: string,
     onCreate?: (session: Session) => void | ((session: Session) => void)
 ): Session => {
     const sessionRef = useRef<Session | null>(null);
 
     if (!sessionRef.current) {
         // safe because ref survives strict-mode replays
-        sessionRef.current = Backend.instance().createSession();
+        sessionRef.current = Backend.instance().createSession(user);
     }
 
     useEffect(() => {

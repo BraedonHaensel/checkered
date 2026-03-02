@@ -88,14 +88,14 @@ export class Backend {
         
     }
 
-    private connectSession(session: Session) {
+    private connectSession(session: Session, user: string) {
         const ws = new WebSocket(this.server().wsUrl)
 
         console.log("Attempting connection to backend server")
 
         ws.addEventListener("close", (ev: CloseEvent) => {
             if(!ev.wasClean) {
-                this.connectSession(session)
+                this.connectSession(session, user)
             }
         })
 
@@ -106,13 +106,17 @@ export class Backend {
         
         ws.addEventListener("open", () => {
             session.connect(ws);
+            session.send({
+                type: "join",
+                user: user
+            })
         })
     } 
 
-    public createSession(): Session {
+    public createSession(user: string): Session {
         const session = new Session();
 
-        this.connectSession(session);
+        this.connectSession(session, user);
 
         return session;
     }

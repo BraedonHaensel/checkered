@@ -4,6 +4,10 @@ interface GenericMessage<T> {
     type: T,
 }
 
+export interface JoinMessage extends GenericMessage<"join"> {
+    user: string
+}
+
 export interface StartMessage extends GenericMessage<"start"> {
     player_colour: PlayerColor,
 }
@@ -13,5 +17,6 @@ export interface MoveMessage extends GenericMessage<"move"> {
     destination: number
 }
 
-export type Message = StartMessage
+export type Message = JoinMessage 
+    | StartMessage
     | MoveMessage
