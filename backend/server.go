@@ -65,17 +65,14 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 	// create a new client for this request
 	client := NewClient(conn, server.moveReceiver)
 
-	log.Printf("Client connected\n")
-
 	go client.readThread()
 	go client.writeThread()
-
-	log.Printf("Client started\n")
 
 	// let the server know and handle the new client
 	server.register <- &client
 
-	log.Printf("Client registered\n")
+	log.Printf("Client connected\n")
+
 }
 
 // main idea of this loop is to register new active users and put them
