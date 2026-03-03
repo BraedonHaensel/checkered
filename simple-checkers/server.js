@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const cors = require("cors");
 const WebSocket = require('ws');
 const path = require('path');
 
@@ -14,12 +15,13 @@ const app = express();
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors());
 
 // Create HTTP server
 const server = http.createServer(app);
 
 // Create WebSocket server
-const webSocketServer = new WebSocket.Server({ server });
+const webSocketServer = new WebSocket.Server({ server, path: "/ws" });
 
 // Handle WebSocket connections
 webSocketServer.on('connection', (webSocket) => {
@@ -49,7 +51,7 @@ webSocketServer.on('connection', (webSocket) => {
             player.send(
                 JSON.stringify({
                     type: 'start',
-                    playerColor: player === game.redPlayer ? 'red' : 'black',
+                    player_color: player === game.redPlayer ? 'red' : 'black',
                 }),
             );
         }
@@ -57,7 +59,7 @@ webSocketServer.on('connection', (webSocket) => {
 
     webSocket.on('message', (message) => {
         const data = JSON.parse(message);
-        console.log(`Received move: ${data.sourceIndex} to ${data.destIndex}`);
+        console.log(`Received move: ${data.source_index} to ${data.destination_index}`);
         const game = activeGames.find((g) =>
             [g.blackPlayer, g.redPlayer].includes(webSocket),
         );
@@ -68,16 +70,16 @@ webSocketServer.on('connection', (webSocket) => {
                 game.redPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        sourceIndex: data.sourceIndex,
-                        destIndex: data.destIndex,
+                        source_index: data.source_index,
+                        destination_index: data.destination_index,
                     }),
                 );
             } else {
                 game.blackPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        sourceIndex: data.sourceIndex,
-                        destIndex: data.destIndex,
+                        source_index: data.source_index,
+                        destination_index: data.destination_index,
                     }),
                 );
             }
@@ -89,10 +91,24 @@ webSocketServer.on('connection', (webSocket) => {
         waitingPlayerSockets = waitingPlayerSockets.filter(
             (player) => player !== webSocket,
         );
+        console.log("Disconnected.")
     });
+    webSocket.on('error', (err) => console.error('WebSocket error:', err));
 });
 
 // Start listening for server connections
 server.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}.`);
 });
+
+app.get("/api/get_leaderboard", (req, res) => {
+    res.json({
+        type: "get_leaderboard",
+        leaderboard: [
+            {
+                "name": "Test",
+                "wl_ratio": 0.5,
+            }
+        ]
+    })
+})

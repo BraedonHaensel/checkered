@@ -23,3 +23,11 @@ export const MoveDirection = {
   DOWN_RIGHT: 3,
 }
 export type MoveDirection = (typeof MoveDirection)[keyof typeof MoveDirection]
+
+export const Page = {
+    HOME: 0,
+    GAME: 1,
+    LOGIN: 2,
+}
+export type Page = (typeof Page)[keyof typeof Page]
+

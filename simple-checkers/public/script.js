@@ -81,7 +81,7 @@ function getPieceMoveDestinations(pieceTileIndex) {
     // Must be your turn to move a piece
     if (!isYourTurn) return [];
 
-    // Must be your piece colour
+    // Must be your piece color
     if (tileStates[pieceTileIndex] !== getOwnedPieceState()) return [];
 
     const possibleMoves = [];
