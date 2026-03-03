@@ -13,12 +13,12 @@ import {
 } from '../utils'
 import { useSession } from '../api/session'
 
-const Game = ({user}: {user: string}) => {
+const Game = ({ user }: { user: string }) => {
     // Array with the state of each of the 32 playable dark tiles in the checkers board
     const [tileStates, setTileStates] = useState<TileState[]>(
         getNewBoardTileStates()
     )
-    const session = useSession(user);
+    const session = useSession(user)
     // Start with the WebSocket connection disabled until the user searches for a game
     const [isInGame, setIsInGame] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>()
@@ -70,7 +70,9 @@ const Game = ({user}: {user: string}) => {
                     isYourTurn ? playerColor : opponentColor,
                     true
                 )
-                if (!containsJumpMove(destIndex, newMoveDestinations[destIndex])) {
+                if (
+                    !containsJumpMove(destIndex, newMoveDestinations[destIndex])
+                ) {
                     // Piece can't continue jumping, change the current player's turn
                     updateIsYourTurn(!isYourTurn)
                 }
@@ -83,23 +85,31 @@ const Game = ({user}: {user: string}) => {
         })
     }
 
-    session.on("start", (message) => {
+    session.on('start', (message) => {
         console.log(`Game started: ${message.player_color}`)
         setIsInGame(true)
         setPlayerColor(message.player_color)
         updateIsYourTurn(message.player_color === PlayerColor.BLACK)
     })
 
-    session.on("move", (message) => {
+    session.on('move', (message) => {
         console.log(
             `Received move: ${message.source_index} to ${message.destination_index}`
         )
         // TODO simple implementation, will likely need more logic
-        updateTileStatesForPieceMove(message.source_index, message.destination_index)
-    });
+        updateTileStatesForPieceMove(
+            message.source_index,
+            message.destination_index
+        )
+    })
 
-    const handlePieceMove = (source_index: number, destination_index: number) => {
-        console.info(`Moving piece from ${source_index} to ${destination_index}`)
+    const handlePieceMove = (
+        source_index: number,
+        destination_index: number
+    ) => {
+        console.info(
+            `Moving piece from ${source_index} to ${destination_index}`
+        )
         // TODO update when we formalize the format of move messages
         session.send({
             type: 'move',
@@ -119,9 +129,7 @@ const Game = ({user}: {user: string}) => {
                 isYourTurn={isYourTurn}
                 onPieceMove={handlePieceMove}
             />
-            {!isInGame &&
-                <p>Searching for an opponent...</p>
-            }
+            {!isInGame && <p>Searching for an opponent...</p>}
             {statusMessage && <p className="text-2xl">{statusMessage}</p>}
         </div>
     )

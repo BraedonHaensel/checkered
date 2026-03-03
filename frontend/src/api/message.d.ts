@@ -1,22 +1,20 @@
-import type { PlayerColor } from "../enums";
+import type { PlayerColor } from '../enums'
 
 interface GenericMessage<T> {
-    type: T,
+    type: T
 }
 
-export interface JoinMessage extends GenericMessage<"join"> {
+export interface JoinMessage extends GenericMessage<'join'> {
     user: string
 }
 
-export interface StartMessage extends GenericMessage<"start"> {
-    player_color: PlayerColor,
+export interface StartMessage extends GenericMessage<'start'> {
+    player_color: PlayerColor
 }
 
-export interface MoveMessage extends GenericMessage<"move"> {
-    source_index: number,
+export interface MoveMessage extends GenericMessage<'move'> {
+    source_index: number
     destination_index: number
 }
 
-export type Message = JoinMessage 
-    | StartMessage
-    | MoveMessage
+export type Message = JoinMessage | StartMessage | MoveMessage
