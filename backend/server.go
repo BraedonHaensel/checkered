@@ -31,18 +31,29 @@ type Server struct {
 	register     chan *Client
 	unregister   chan *Client
 	newGame      chan *GameRoom
-	moveReciever chan GameMove
+	moveReceiver chan GameMove
 }
 
 var addr = flag.String("addr", ":8080", "http service address")
 
 func InitServer() *Server {
-	server := Server{}
+	server := Server{
+		clients:      make(map[uuid.UUID]*Client),
+		games:        make(map[uuid.UUID]*GameRoom),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		newGame:      make(chan *GameRoom),
+		moveReceiver: make(chan GameMove),
+	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
 }
 
-var upgrader = websocket.Upgrader{}
+func checkOrigin(r *http.Request) bool {
+	return true
+}
+
+var upgrader = websocket.Upgrader{CheckOrigin: checkOrigin}
 
 func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 	// upgrade to a websocket connection
@@ -52,24 +63,41 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(conn, server.moveReciever)
+	client := NewClient(conn, server.moveReceiver)
+
+	log.Printf("Client connected\n")
+
+	go client.readThread()
+	go client.writeThread()
+
+	log.Printf("Client started\n")
 
 	// let the server know and handle the new client
 	server.register <- &client
 
-	go client.readThread()
-	go client.writeThread()
+	log.Printf("Client registered\n")
 }
 
 // main idea of this loop is to register new active users and put them
 // into the server struct
 func (server *Server) serverLoop() {
+	log.Println("Server Running...")
 	for {
 		select {
 		case new_client := <-server.register:
 			server.clients[new_client.Uuid] = new_client
+			log.Printf(
+				"New client \"%s\" registered with UUID: \"%s\"",
+				new_client.username,
+				new_client.Uuid,
+			)
 		case unregister := <-server.unregister:
 			delete(server.clients, unregister.Uuid)
+			log.Printf(
+				"Client \"%s\" with UUID: \"%s\" deregistered",
+				unregister.username,
+				unregister.Uuid,
+			)
 			// TODO: remove client from game rooms
 		case newGame := <-server.newGame:
 			// tell both servers about the new game
@@ -88,7 +116,7 @@ func (server *Server) serverLoop() {
 			// send the message that they have found a game to both players
 			server.clients[newGame.blackPlayer.Uuid].send <- blackBytes
 			server.clients[newGame.redPlayer.Uuid].send <- redBytes
-		case gameMove := <-server.moveReciever:
+		case gameMove := <-server.moveReceiver:
 			// TODO: check if the game exists, check if the user is using the same term
 			gameState := server.games[gameMove.GameID]
 			isValidMove := gameState.isValidMove(gameMove)
@@ -110,13 +138,14 @@ func (server *Server) serverLoop() {
 				// send the move to the black player
 				server.clients[gameState.blackPlayer.Uuid].send <- message
 			}
-		}
-		if server.readyQueue.size >= 2 {
-			redPlayer := Dequeue(&server.readyQueue)
-			blackPlayer := Dequeue(&server.readyQueue)
-			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.Uuid, blackPlayer.Uuid)
-			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
-			server.newGame <- &gameRoom
+		default:
+			if server.readyQueue.size >= 2 {
+				redPlayer := Dequeue(&server.readyQueue)
+				blackPlayer := Dequeue(&server.readyQueue)
+				log.Printf("New game created (red: %s, black: %s)\n", redPlayer.Uuid, blackPlayer.Uuid)
+				gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
+				server.newGame <- &gameRoom
+			}
 		}
 	}
 }
@@ -135,5 +164,4 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
-	log.Printf("Server listening on %s\n", *addr)
 }
