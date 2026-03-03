@@ -22,7 +22,7 @@ function App() {
         }).catch(err => {
             console.error("Failed to fetch leaderboard: ", err);
         });
-    })
+    }, [])
 
     const PageComponent = pages[page]
     return (

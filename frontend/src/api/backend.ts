@@ -32,26 +32,38 @@ export class Backend {
 
     public async get<RequestType extends Request["type"]>(type: RequestType, payload: Omit<Extract<Request, {type: RequestType}>, "type">): Promise<Extract<Response, {type: RequestType}>> {
         const url = `${this.server().apiUrl}/${type}`;
-        const raw = await fetch(url, {
-            body: Object.keys(payload).length > 0 ? JSON.stringify(payload) : null,
-            headers: {
-                "Content-Type": "application/json",
-            },
-            method: "GET",
-        });
+        let raw: globalThis.Response = undefined as any;
+        try {
+            raw = await fetch(url, {
+                body: Object.keys(payload).length > 0 ? JSON.stringify({...payload, type}) : null,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                method: "GET",
+            });
+        } catch (e) {
+            this.handleServerError();
+            return this.get(type, payload)
+        }
 
         return await raw.json() as Extract<Response, {type: RequestType}>;
     }
 
     public async post<RequestType extends Request["type"]>(type: RequestType, payload: Omit<Extract<Request, {type: RequestType}>, "type">): Promise<Extract<Response, {type: RequestType}>> {
         const url = `${this.server().apiUrl}/${type}`;
-        const raw = await fetch(url, {
-            body: Object.keys(payload).length > 0 ? JSON.stringify(payload) : null,
+        let raw: globalThis.Response = undefined as any;
+        try {
+            raw = await fetch(url, {
+            body: Object.keys(payload).length > 0 ? JSON.stringify({...payload, type}) : null,
             headers: {
                 "Content-Type": "application/json",
             },
             method: "POST",
         });
+        } catch (e) {
+            this.handleServerError();
+            return this.post(type, payload)
+        }
 
         return await raw.json() as Extract<Response, {type: RequestType}>;
     }
@@ -85,7 +97,6 @@ export class Backend {
 
     public handleServerError() {
         this.current = null;
-        
     }
 
     private connectSession(session: Session, user: string) {
