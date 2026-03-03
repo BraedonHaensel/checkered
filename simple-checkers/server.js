@@ -51,7 +51,7 @@ webSocketServer.on('connection', (webSocket) => {
             player.send(
                 JSON.stringify({
                     type: 'start',
-                    player_colour: player === game.redPlayer ? 'red' : 'black',
+                    player_color: player === game.redPlayer ? 'red' : 'black',
                 }),
             );
         }

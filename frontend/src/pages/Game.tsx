@@ -84,10 +84,10 @@ const Game = ({user}: {user: string}) => {
     }
 
     session.on("start", (message) => {
-        console.log(`Game started: ${message.player_colour}`)
+        console.log(`Game started: ${message.player_color}`)
         setIsInGame(true)
-        setPlayerColor(message.player_colour)
-        updateIsYourTurn(message.player_colour === PlayerColor.BLACK)
+        setPlayerColor(message.player_color)
+        updateIsYourTurn(message.player_color === PlayerColor.BLACK)
     })
 
     session.on("move", (message) => {
