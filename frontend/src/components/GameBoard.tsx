@@ -2,22 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Tile from './Tile'
 import { PlayerColor } from '../enums'
 import { getMoveDestinations } from '../utils'
+import type { GameState } from '../gameState'
 
 type Props = {
-    tileStates: number[] // Array with the state of each of the 32 playable dark tiles in the checkers board
-    playerColor: PlayerColor
-    isYourTurn: boolean
+    gameState: GameState
     onPieceMove: (sourceIndex: number, destIndex: number) => void
 }
 
 // Checkers game board
 const GameBoard = ({
-    tileStates,
-    playerColor,
-    isYourTurn,
+    gameState,
     onPieceMove,
 }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
+
+    const {tileStates, playerColor, isYourTurn} = gameState
 
     useEffect(() => {
         // Clear selected piece after a board state change
