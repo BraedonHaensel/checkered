@@ -56,7 +56,7 @@ export class Session {
 
 export const useSession = (
     user: string,
-    onCreate?: (session: Session) => void | ((session: Session) => void)
+    onCreate?: (session: Session) => (void | ((session: Session) => void))
 ): Session => {
     const sessionRef = useRef<Session | null>(null);
 

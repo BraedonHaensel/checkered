@@ -14,7 +14,7 @@ const Home = ({setPage}: {setPage: (page: Page) => void}) => {
       <h1>CHECKERED</h1>
       <GameBoard
         tileStates={tileStates}
-        playerColor={PlayerColor.RED}
+        playerColor={PlayerColor.BLACK}
         isYourTurn={false}
         onPieceMove={() => {}}
       />
