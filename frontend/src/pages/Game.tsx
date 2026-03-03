@@ -92,22 +92,22 @@ const Game = ({user}: {user: string}) => {
 
     session.on("move", (message) => {
         console.log(
-            `Received move: ${message.source} to ${message.destination}`
+            `Received move: ${message.source_index} to ${message.destination_index}`
         )
         // TODO simple implementation, will likely need more logic
-        updateTileStatesForPieceMove(message.source, message.destination)
+        updateTileStatesForPieceMove(message.source_index, message.destination_index)
     });
 
-    const handlePieceMove = (source: number, destination: number) => {
-        console.info(`Moving piece from ${source} to ${destination}`)
+    const handlePieceMove = (source_index: number, destination_index: number) => {
+        console.info(`Moving piece from ${source_index} to ${destination_index}`)
         // TODO update when we formalize the format of move messages
         session.send({
             type: 'move',
-            source,
-            destination,
+            source_index,
+            destination_index,
         })
         // TODO simple implementation, will likely need more logic
-        updateTileStatesForPieceMove(source, destination)
+        updateTileStatesForPieceMove(source_index, destination_index)
     }
 
     return (

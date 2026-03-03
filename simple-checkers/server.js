@@ -59,7 +59,7 @@ webSocketServer.on('connection', (webSocket) => {
 
     webSocket.on('message', (message) => {
         const data = JSON.parse(message);
-        console.log(`Received move: ${data.source} to ${data.destination}`);
+        console.log(`Received move: ${data.source_index} to ${data.destination_index}`);
         const game = activeGames.find((g) =>
             [g.blackPlayer, g.redPlayer].includes(webSocket),
         );
@@ -70,16 +70,16 @@ webSocketServer.on('connection', (webSocket) => {
                 game.redPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        source: data.source,
-                        destination: data.destination,
+                        source_index: data.source_index,
+                        destination_index: data.destination_index,
                     }),
                 );
             } else {
                 game.blackPlayer.send(
                     JSON.stringify({
                         type: 'move',
-                        source: data.source,
-                        destination: data.destination,
+                        source_index: data.source_index,
+                        destination_index: data.destination_index,
                     }),
                 );
             }

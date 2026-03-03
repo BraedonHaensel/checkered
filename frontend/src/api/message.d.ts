@@ -13,8 +13,8 @@ export interface StartMessage extends GenericMessage<"start"> {
 }
 
 export interface MoveMessage extends GenericMessage<"move"> {
-    source: number,
-    destination: number
+    source_index: number,
+    destination_index: number
 }
 
 export type Message = JoinMessage 
