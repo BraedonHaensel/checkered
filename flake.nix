@@ -1,11 +1,13 @@
 {
     description = "GEARS Game";
 
-    inputs.flake-utils.url = "github:numtide/flake-utils";
+    inputs.nixpkgs.url = "github:nixos/nixpkgs/0cd7045799ff794bc9393c5ef94bda516f6cb0fc";
 
-    outputs = { self, nixpkgs, flake-utils }: flake-utils.lib.eachDefaultSystem (system:
-        let pkgs = nixpkgs.legacyPackages.${system}; in {
-            devShells.default = import ./shell.nix { inherit pkgs; };
-        }
-    );
+    outputs = { self, nixpkgs }:
+        let
+            system = "x86_64-linux";
+            pkgs = import nixpkgs { inherit system; };
+        in {
+            devShells.${system}.default = import ./shell.nix { inherit pkgs; };
+        };
 }
