@@ -17,6 +17,7 @@ const (
 	SPECTATING = "Spectating"
 	IDLE       = "Idle"
 	writeWait  = 10 * time.Second
+	QUEUE_SIZE = 100
 )
 
 type Server struct {
@@ -24,7 +25,7 @@ type Server struct {
 	clients map[uuid.UUID]*Client
 	// games that new clients are in
 	games       map[uuid.UUID]*GameRoom
-	InQueue     []*Client
+	readyQueue  Queue[*Client]
 	leaderboard *Leaderboard
 
 	register     chan *Client
@@ -36,7 +37,9 @@ type Server struct {
 var addr = flag.String("addr", ":8080", "http service address")
 
 func InitServer() *Server {
-	return &Server{}
+	server := Server{}
+	InitQueue(&server.readyQueue, QUEUE_SIZE)
+	return &server
 }
 
 var upgrader = websocket.Upgrader{}
@@ -108,6 +111,13 @@ func (server *Server) serverLoop() {
 				server.clients[gameState.blackPlayer.Uuid].send <- message
 			}
 		}
+		if server.readyQueue.size >= 2 {
+			redPlayer := Dequeue(&server.readyQueue)
+			blackPlayer := Dequeue(&server.readyQueue)
+			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.Uuid, blackPlayer.Uuid)
+			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
+			server.newGame <- &gameRoom
+		}
 	}
 }
 
@@ -125,4 +135,5 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+	log.Printf("Server listening on %s\n", *addr)
 }
