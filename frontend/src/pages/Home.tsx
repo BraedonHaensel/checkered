@@ -1,8 +1,8 @@
 import GameBoard from '../components/GameBoard'
 import SearchButton from '../components/SearchButton'
 import { Page, PlayerColor } from '../enums'
-import type { GameState } from '../gameState'
-import { getNewBoardTileStates } from '../utils'
+import type { GameState } from '../game-state'
+import { getNewBoardTileStates } from '../game-utils'
 
 const Home = ({ setPage }: { setPage: (page: Page) => void }) => {
     // Array with the state of each of the 32 playable dark tiles in the checkers board

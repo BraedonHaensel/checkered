@@ -10,9 +10,9 @@ import {
     isBlackPiece,
     getMoveDestinations,
     containsJumpMove,
-} from '../utils'
+} from '../game-utils'
 import { useSession } from '../api/session'
-import type { GameState } from '../gameState'
+import type { GameState } from '../game-state'
 
 const Game = ({ user }: { user: string }) => {
     const [gameState, setGameState] = useState<GameState>({
@@ -123,10 +123,7 @@ const Game = ({ user }: { user: string }) => {
     return (
         <div className="space-y-6">
             <h1>CHECKERED</h1>
-            <GameBoard
-                gameState={gameState}
-                onPieceMove={handlePieceMove}
-            />
+            <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
             {status === 'SEARCHING' && <p>Searching for an opponent...</p>}
             {status === 'IN_GAME' && (
                 <p className="text-2xl">
