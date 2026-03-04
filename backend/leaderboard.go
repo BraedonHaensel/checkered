@@ -43,9 +43,7 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) {
 
 // / return a json payload of the current leaderboard
 func (s *Server) getLeaderboard(w http.ResponseWriter, _ *http.Request) {
-	EnableCORS(w)
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	err := json.NewEncoder(w).Encode(s.leaderboard)
 	if err != nil {
 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)

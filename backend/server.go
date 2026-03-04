@@ -130,7 +130,7 @@ func main() {
 	http.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		server.getLeaderboard(w, r)
 	})
-	err := http.ListenAndServe(*addr, nil)
+	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
