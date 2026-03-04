@@ -1,0 +1,30 @@
+.piece {
+    display: flex;
+    position: relative;
+    align-items: center;
+    justify-content: center;
+}
+
+.piece::after, .piece::before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 90%;
+    height: 90%;
+    border-radius: 100vw;
+}
+
+.piece.king::before {
+    background-image: url("https://worldofprintables.com/wp-content/uploads/2024/01/Free-SVG-Princess-Crown.svg");
+    background-position: center center;
+    background-repeat: no-repeat;
+    filter: invert();
+}
+
+.piece.red::after {
+    border: 3px dotted darkred;
+}
+
+.piece.black::after {
+    border: 3px dotted gray;
+}
