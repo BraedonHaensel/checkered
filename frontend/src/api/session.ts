@@ -3,7 +3,7 @@ import type { Message } from './message'
 import { Backend } from './backend'
 
 export class Session {
-    private handlers: Record<string, Array<(msg: any) => void>> = {}
+    private handlers: Record<string, (msg: any) => void> = {}
     private ws: WebSocket | null = null
 
     public constructor() {}
@@ -13,20 +13,16 @@ export class Session {
 
         const type = data.type
 
-        const handlers = this.handlers[type] || []
+        const handler = this.handlers[type] || ((_: any) => {});
 
-        handlers.forEach((handler) => handler(data))
+        handler(data);
     }
 
     public on<MessageType extends Message['type']>(
         type: MessageType,
         handler: (msg: Extract<Message, { type: MessageType }>) => void
     ): void {
-        if (!Object.keys(this.handlers).includes(type)) {
-            this.handlers[type] = []
-        }
-
-        this.handlers[type].push(handler)
+        this.handlers[type] = handler;
     }
 
     public connect(ws: WebSocket) {
