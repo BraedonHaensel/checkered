@@ -16,10 +16,3 @@ export interface GameState {
     isYourTurn: boolean
     previousMove: PreviousMove | undefined
 }
-
-export interface GameState {
-    status: GameStatus
-    tileStates: TileState[]
-    playerColor: PlayerColor
-    isYourTurn: boolean
-}
