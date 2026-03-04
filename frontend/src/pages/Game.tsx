@@ -188,6 +188,13 @@ const Game = ({ user }: { user: string }) => {
                     {gameState.isYourTurn ? 'Your turn!' : "Opponent's turn..."}
                 </p>
             )}
+            {gameStatus.state === 'FINISHED' && (
+                <p className="text-2xl">
+                    {gameState.playerColor === gameStatus.winner
+                        ? 'Your win!'
+                        : 'You lose!'}
+                </p>
+            )}
         </div>
     )
 }

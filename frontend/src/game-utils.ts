@@ -278,7 +278,9 @@ export const getMoveDestinations = (
 
     if (previousMoveDestIndex !== undefined) {
         // Get the color of the player that performed the previous move
-        const previousMovePlayerColor = isBlackPiece(previousMoveDestIndex)
+        const previousMovePlayerColor = isBlackPiece(
+            tileStates[previousMoveDestIndex]
+        )
             ? PlayerColor.BLACK
             : PlayerColor.RED
         if (previousMovePlayerColor === playerColor && isYourTurn) {
@@ -344,8 +346,7 @@ export const hasLegalMoves = (
         playerMoveDestinations.find(
             (moveDestinations) => moveDestinations.length > 0
         ) !== undefined
-    // If no moves, the player has lost
-    return !hasMove
+    return hasMove
 }
 
 /**
