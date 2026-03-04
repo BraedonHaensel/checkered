@@ -10,88 +10,142 @@ import {
     isBlackPiece,
     getMoveDestinations,
     containsJumpMove,
+    hasRemainingPieces,
+    hasLegalMoves,
 } from '../game-utils'
 import { useSession } from '../api/session'
-import type { GameState } from '../game-state'
+import type { GameState, GameStatus } from '../game-state'
 
 const Game = ({ user }: { user: string }) => {
     const [gameState, setGameState] = useState<GameState>({
-        status: 'SEARCHING',
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
         previousMove: undefined,
     })
-    const { status, tileStates, playerColor, isYourTurn } = gameState
+    const [gameStatus, setGameStatus] = useState<GameStatus>({
+        state: 'SEARCHING',
+    })
     const session = useSession(user)
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
     }
 
-    // Updates tileStates for a piece move
-    const updateTileStatesForPieceMove = (
-        sourceIndex: number,
-        destIndex: number
-    ) => {
-        let newDestTileState = tileStates[sourceIndex]
-        if (isStandardPiece(tileStates[sourceIndex])) {
-            // Check for a promotion from a standard to crown piece
-            const isBlack = isBlackPiece(newDestTileState)
-            const destRow = tileIndexToRow(destIndex)
-            if (isBlack && destRow === 0) {
-                newDestTileState = TileState.BLACK_KING_PIECE
-            } else if (!isBlack && destRow === 7) {
-                newDestTileState = TileState.RED_KING_PIECE
-            }
-        }
-
+    // Performs a piece move and updates the game state
+    const performPieceMove = (sourceIndex: number, destIndex: number) => {
         setGameState((prev) => {
             const newTileStates = [...prev.tileStates]
 
-            // Move piece from source to dest index
-            newTileStates[destIndex] = newDestTileState
+            // Check the state of the moved piece
+            let newPieceState = newTileStates[sourceIndex]
+            const isBlackMove = isBlackPiece(newPieceState)
+
+            // Check for a promotion from a standard to crown piece
+            if (isStandardPiece(newPieceState)) {
+                const destRow = tileIndexToRow(destIndex)
+                if (isBlackMove && destRow === 0) {
+                    newPieceState = TileState.BLACK_KING_PIECE
+                } else if (!isBlackMove && destRow === 7) {
+                    newPieceState = TileState.RED_KING_PIECE
+                }
+            }
+
+            // Move the piece from the source to dest index
+            newTileStates[destIndex] = newPieceState
             newTileStates[sourceIndex] = TileState.EMPTY
 
-            // If this is a jump move, remove the jumped piece and potentially continue jumping
-            if (isJumpMove(sourceIndex, destIndex)) {
+            // Get the colors of the player making the current move, and the player that is waiting
+            const currentPlayerColor = isBlackMove
+                ? PlayerColor.BLACK
+                : PlayerColor.RED
+            const waitingPlayerColor = isBlackMove
+                ? PlayerColor.RED
+                : PlayerColor.BLACK
+
+            // Check if the move is a jump
+            const isJump = isJumpMove(sourceIndex, destIndex)
+            if (isJump) {
+                // Remove the jumped piece
                 const jumpedIndex = getJumpedIndex(sourceIndex, destIndex)
                 newTileStates[jumpedIndex] = TileState.EMPTY
 
-                const opponentColor =
-                    playerColor === PlayerColor.BLACK
-                        ? PlayerColor.RED
-                        : PlayerColor.BLACK
-
-                // Check the new move destinations for a jump move for the current player
-                const newMoveDestinations = getMoveDestinations(
-                    newTileStates,
-                    isYourTurn ? playerColor : opponentColor,
-                    true
-                )
-                if (
-                    !containsJumpMove(destIndex, newMoveDestinations[destIndex])
-                ) {
-                    // Piece can't continue jumping, change the current player's turn
-                    updateGameState({ isYourTurn: !isYourTurn })
+                // Check if the game is finished due to the jumped waiting player being out of pieces
+                if (!hasRemainingPieces(newTileStates, waitingPlayerColor)) {
+                    setGameStatus({
+                        state: 'FINISHED',
+                        winner: currentPlayerColor,
+                    })
+                    return {
+                        ...prev,
+                        tileStates: newTileStates,
+                        isYourTurn: false,
+                        previousMove: {
+                            sourceIndex,
+                            destIndex,
+                        },
+                    }
                 }
-            } else {
-                // Normal move, change the current player's turn
-                updateGameState({ isYourTurn: !isYourTurn })
             }
 
+            if (isJump) {
+                // Get the move destinations for the new board state
+                const newMoveDestinations = getMoveDestinations(
+                    newTileStates,
+                    currentPlayerColor,
+                    true,
+                    destIndex
+                )
+                if (
+                    containsJumpMove(destIndex, newMoveDestinations[destIndex])
+                ) {
+                    // The previously moved piece can jump again. Keep the current player's turn
+                    return {
+                        ...prev,
+                        tileStates: newTileStates,
+                        previousMove: {
+                            sourceIndex,
+                            destIndex,
+                        },
+                    }
+                }
+            }
+
+            // Waiting player's turn next. Check if they are out of moves
+            if (!hasLegalMoves(newTileStates, waitingPlayerColor)) {
+                // Game over, waiting player is out of moves
+                setGameStatus({
+                    state: 'FINISHED',
+                    winner: currentPlayerColor,
+                })
+                return {
+                    ...prev,
+                    tileStates: newTileStates,
+                    isYourTurn: false,
+                    previousMove: {
+                        sourceIndex,
+                        destIndex,
+                    },
+                }
+            }
+
+            // Return the new game state with the next turn going to the waiting player
             return {
                 ...prev,
                 tileStates: newTileStates,
-                previousMove: { sourceIndex, destIndex },
+                isYourTurn: gameState.playerColor === waitingPlayerColor,
+                previousMove: {
+                    sourceIndex,
+                    destIndex,
+                },
             }
         })
     }
 
     session.on('start', (message) => {
         console.log(`Game started: ${message.player_color}`)
+        setGameStatus({ state: 'IN_GAME' })
         updateGameState({
-            status: 'IN_GAME',
             playerColor: message.player_color,
             isYourTurn: message.player_color === PlayerColor.BLACK,
         })
@@ -102,10 +156,7 @@ const Game = ({ user }: { user: string }) => {
             `Received move: ${message.source_index} to ${message.destination_index}`
         )
         // TODO simple implementation, will likely need more logic
-        updateTileStatesForPieceMove(
-            message.source_index,
-            message.destination_index
-        )
+        performPieceMove(message.source_index, message.destination_index)
     })
 
     const handlePieceMove = (
@@ -122,17 +173,26 @@ const Game = ({ user }: { user: string }) => {
             destination_index,
         })
         // TODO simple implementation, will likely need more logic
-        updateTileStatesForPieceMove(source_index, destination_index)
+        performPieceMove(source_index, destination_index)
     }
 
     return (
         <div className="space-y-6">
             <h1>CHECKERED</h1>
             <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
-            {status === 'SEARCHING' && <p>Searching for an opponent...</p>}
-            {status === 'IN_GAME' && (
+            {gameStatus.state === 'SEARCHING' && (
+                <p>Searching for an opponent...</p>
+            )}
+            {gameStatus.state === 'IN_GAME' && (
                 <p className="text-2xl">
-                    {isYourTurn ? 'Your turn!' : "Opponent's turn..."}
+                    {gameState.isYourTurn ? 'Your turn!' : "Opponent's turn..."}
+                </p>
+            )}
+            {gameStatus.state === 'FINISHED' && (
+                <p className="text-2xl">
+                    {gameState.playerColor === gameStatus.winner
+                        ? 'Your win!'
+                        : 'You lose!'}
                 </p>
             )}
         </div>
