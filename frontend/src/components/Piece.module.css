@@ -1,8 +1,27 @@
+.piece.red {
+    color: darkred;
+}
+
+.piece.black {
+    color: #242424;
+}
+
 .piece {
     display: flex;
     position: relative;
     align-items: center;
     justify-content: center;
+    box-shadow: 3px 3px, #000000aa 6px 6px 6px;
+    margin-left: -8%;
+    margin-top: -8%;
+}
+
+.piece.movable::after, .piece.selected::after {
+    border: 3px dotted gold !important;
+}
+
+.piece.selected {
+    scale: 1.1;
 }
 
 .piece::after, .piece::before {
