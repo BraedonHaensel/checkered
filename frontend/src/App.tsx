@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
 import Home from './pages/Home'
 import { Page } from './enums'
 import Game from './pages/Game'
-import { Backend } from './api/backend'
 import Login from './pages/Login'
+import Leaderboard from './pages/Leaderboard'
 
 const pages: Record<
     Page,
@@ -17,22 +17,12 @@ const pages: Record<
     [Page.HOME]: Home,
     [Page.GAME]: Game,
     [Page.LOGIN]: Login,
+    [Page.LEADERBOARD]: Leaderboard,
 }
 
 function App() {
     const [user, setUser] = useState<string>('')
     const [page, setPage] = useState<Page>(Page.LOGIN)
-
-    useEffect(() => {
-        Backend.instance()
-            .get('get_leaderboard', {})
-            .then((res) => {
-                console.log(res)
-            })
-            .catch((err) => {
-                console.error('Failed to fetch leaderboard: ', err)
-            })
-    }, [])
 
     const PageComponent = pages[page]
     return (

@@ -28,5 +28,6 @@ export const Page = {
     HOME: 0,
     GAME: 1,
     LOGIN: 2,
+    LEADERBOARD: 3,
 }
 export type Page = (typeof Page)[keyof typeof Page]
