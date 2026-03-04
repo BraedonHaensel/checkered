@@ -286,13 +286,13 @@ export const getMoveDestinations = (
         if (previousMovePlayerColor === playerColor && isYourTurn) {
             // It's still the player's turn, so they must be performing an additional jump with the
             // piece at the previousMoveDestIndex
-            const pieceDestinations = getPieceMoveDestinations(
+            let pieceDestinations = getPieceMoveDestinations(
                 previousMoveDestIndex,
                 playerColor,
                 tileStates
             )
             // Filter for double jumps only
-            pieceDestinations.filter((destIndex) =>
+            pieceDestinations = pieceDestinations.filter((destIndex) =>
                 isJumpMove(previousMoveDestIndex, destIndex)
             )
             const moveDestinations: number[][] = Array.from(
