@@ -11,6 +11,7 @@ const Home = ({ setPage }: { setPage: (page: Page) => void }) => {
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
+        previousMove: undefined
     }
 
     return (

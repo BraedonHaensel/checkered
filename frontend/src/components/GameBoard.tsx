@@ -13,7 +13,7 @@ type Props = {
 const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
 
-    const { tileStates, playerColor, isYourTurn } = gameState
+    const { tileStates, playerColor, isYourTurn, previousMove } = gameState
 
     useEffect(() => {
         // Clear selected piece after a board state change
@@ -90,6 +90,12 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
                 const isMoveDestination =
                     selectedPieceMoveDestinations.includes(tileIndex)
 
+                // Controls when the previous move indicator should be displayed
+                const showPreviousMoveHighlight =
+                    !selectedPieceIndex &&
+                    (previousMove?.sourceIndex === tileIndex ||
+                        previousMove?.destIndex === tileIndex)
+
                 // Add a dark tile
                 result.push(
                     <Tile
@@ -100,6 +106,7 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
                         canSelectPiece={canSelectPiece}
                         isPieceSelected={selectedPieceIndex === tileIndex}
                         isMoveDestination={isMoveDestination}
+                        showPreviousMoveHighlight={showPreviousMoveHighlight}
                         onClick={
                             canSelectPiece || isMoveDestination
                                 ? handleTileClick
@@ -119,6 +126,7 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
         moveDestinations,
         selectedPieceIndex,
         selectedPieceMoveDestinations,
+        previousMove,
         handleTileClick,
     ])
 

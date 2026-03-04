@@ -20,6 +20,7 @@ const Game = ({ user }: { user: string }) => {
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
+        previousMove: undefined,
     })
     const { status, tileStates, playerColor, isYourTurn } = gameState
     const session = useSession(user)
@@ -79,7 +80,11 @@ const Game = ({ user }: { user: string }) => {
                 updateGameState({ isYourTurn: !isYourTurn })
             }
 
-            return { ...prev, tileStates: newTileStates }
+            return {
+                ...prev,
+                tileStates: newTileStates,
+                previousMove: { sourceIndex, destIndex },
+            }
         })
     }
 
