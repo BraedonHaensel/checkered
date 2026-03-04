@@ -44,6 +44,7 @@ func InitServer() *Server {
 		unregister:   make(chan *Client),
 		newGame:      make(chan *GameRoom),
 		moveReceiver: make(chan GameMove),
+		leaderboard:  &Leaderboard{},
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
@@ -150,6 +151,13 @@ func (server *Server) serverLoop() {
 func main() {
 	flag.Parse()
 	server := InitServer()
+	server.leaderboard.AddPlayerToLeaderboard("akeuben")
+	server.leaderboard.AddPlayerToLeaderboard("test")
+	server.leaderboard.UpdateLeaderboard(GameResult{
+		gameID: "test",
+		winner: "akeuben",
+		loser: "test",
+	})
 	go server.serverLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(server, w, r)
@@ -157,7 +165,7 @@ func main() {
 	http.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		server.getLeaderboard(w, r)
 	})
-	err := http.ListenAndServe(*addr, nil)
+	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

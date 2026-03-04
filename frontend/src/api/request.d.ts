@@ -6,10 +6,10 @@ interface GenericRequest<T> {
     type: T
 }
 
-export interface GetLeaderboardRequest extends GenericRequest<'get_leaderboard'> {}
+export interface GetLeaderboardRequest extends GenericRequest<'leaderboard'> {}
 
-export interface GetLeaderboardResponse extends GenericRequest<'get_leaderboard'> {
-    leaderboard: { name: string; wl_ratio: number }[]
+export interface GetLeaderboardResponse extends GenericRequest<'leaderboard'> {
+    board: { username: string; wins: number, losses: number }[]
 }
 
 export type Request = GetLeaderboardRequest

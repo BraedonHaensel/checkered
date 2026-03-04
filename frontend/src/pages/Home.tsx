@@ -19,6 +19,7 @@ const Home = ({ setPage }: { setPage: (page: Page) => void }) => {
             <h1>CHECKERED</h1>
             <GameBoard gameState={gameState} onPieceMove={() => {}} />
             <SearchButton onClick={() => setPage(Page.GAME)} />
+            <button onClick={() => setPage(Page.LEADERBOARD)}>Leaderboard</button>
         </div>
     )
 }
