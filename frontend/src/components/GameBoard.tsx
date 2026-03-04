@@ -1,23 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Tile from './Tile'
 import { PlayerColor } from '../enums'
-import { getMoveDestinations } from '../utils'
+import { getMoveDestinations } from '../game-utils'
+import type { GameState } from '../game-state'
 
 type Props = {
-    tileStates: number[] // Array with the state of each of the 32 playable dark tiles in the checkers board
-    playerColor: PlayerColor
-    isYourTurn: boolean
+    gameState: GameState
     onPieceMove: (sourceIndex: number, destIndex: number) => void
 }
 
 // Checkers game board
-const GameBoard = ({
-    tileStates,
-    playerColor,
-    isYourTurn,
-    onPieceMove,
-}: Props) => {
+const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
+
+    const { tileStates, playerColor, isYourTurn, previousMove } = gameState
 
     useEffect(() => {
         // Clear selected piece after a board state change
@@ -94,6 +90,12 @@ const GameBoard = ({
                 const isMoveDestination =
                     selectedPieceMoveDestinations.includes(tileIndex)
 
+                // Controls when the previous move indicator should be displayed
+                const showPreviousMoveHighlight =
+                    !selectedPieceIndex &&
+                    (previousMove?.sourceIndex === tileIndex ||
+                        previousMove?.destIndex === tileIndex)
+
                 // Add a dark tile
                 result.push(
                     <Tile
@@ -104,6 +106,7 @@ const GameBoard = ({
                         canSelectPiece={canSelectPiece}
                         isPieceSelected={selectedPieceIndex === tileIndex}
                         isMoveDestination={isMoveDestination}
+                        showPreviousMoveHighlight={showPreviousMoveHighlight}
                         onClick={
                             canSelectPiece || isMoveDestination
                                 ? handleTileClick
@@ -123,6 +126,7 @@ const GameBoard = ({
         moveDestinations,
         selectedPieceIndex,
         selectedPieceMoveDestinations,
+        previousMove,
         handleTileClick,
     ])
 

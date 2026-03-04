@@ -1,6 +1,6 @@
 import React from 'react'
 import { PlayerColor, TileState } from '../enums'
-import { isBlackPiece, isKingPiece } from '../utils'
+import { isBlackPiece, isKingPiece } from '../game-utils'
 import Piece from './Piece'
 
 type LightTileProps = {
@@ -10,6 +10,7 @@ type LightTileProps = {
     canSelectPiece?: never
     isPieceSelected?: never
     isMoveDestination?: never
+    showPreviousMoveHighlight?: never
     onClick?: never
 }
 
@@ -20,6 +21,7 @@ type DarkTileProps = {
     canSelectPiece: boolean
     isPieceSelected: boolean
     isMoveDestination: boolean
+    showPreviousMoveHighlight: boolean
     onClick: ((tileIndex: number) => void) | undefined
 }
 
@@ -34,6 +36,7 @@ const Tile = React.memo(
         canSelectPiece,
         isPieceSelected,
         isMoveDestination,
+        showPreviousMoveHighlight,
         onClick,
     }: Props) => {
         if (tileIndex === undefined) {
@@ -56,19 +59,27 @@ const Tile = React.memo(
                 }
                 onClick={() => onClick?.(tileIndex)}
             >
-                {/* Display a checkers piece */}
-                {hasPiece && (
-                    <Piece
-                        isBlack={isBlackPiece(tileState)}
-                        isKing={isKingPiece(tileState)}
-                        showSelectableHighlight={canSelectPiece}
-                        showSelectedHighlight={isPieceSelected}
-                    />
-                )}
-                {/* Display a move destination indicator */}
-                {isMoveDestination && (
-                    <div className="h-1/3 w-1/3 rounded-full bg-gray-300 opacity-70"></div>
-                )}
+                {/* Previous move indicator */}
+                <div
+                    className={
+                        'flex h-full w-full items-center justify-center ' +
+                        `${showPreviousMoveHighlight ? 'bg-[#DFFFC4]/35' : ''}`
+                    }
+                >
+                    {/* Display a checkers piece */}
+                    {hasPiece && (
+                        <Piece
+                            isBlack={isBlackPiece(tileState)}
+                            isKing={isKingPiece(tileState)}
+                            showSelectableHighlight={canSelectPiece}
+                            showSelectedHighlight={isPieceSelected}
+                        />
+                    )}
+                    {/* Display a move destination indicator */}
+                    {isMoveDestination && (
+                        <div className="h-1/3 w-1/3 rounded-full bg-gray-300 opacity-70"></div>
+                    )}
+                </div>
             </div>
         )
     }
