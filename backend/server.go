@@ -36,7 +36,9 @@ type Server struct {
 var addr = flag.String("addr", ":8080", "http service address")
 
 func InitServer() *Server {
-	return &Server{}
+	return &Server{
+		leaderboard: &Leaderboard{},
+	}
 }
 
 var upgrader = websocket.Upgrader{}
@@ -114,6 +116,13 @@ func (server *Server) serverLoop() {
 func main() {
 	flag.Parse()
 	server := InitServer()
+	server.leaderboard.AddPlayerToLeaderboard("akeuben")
+	server.leaderboard.AddPlayerToLeaderboard("test")
+	server.leaderboard.UpdateLeaderboard(GameResult{
+		gameID: "test",
+		winner: "akeuben",
+		loser: "test",
+	})
 	go server.serverLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(server, w, r)
