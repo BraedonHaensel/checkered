@@ -10,24 +10,22 @@ import {
     isBlackPiece,
     getMoveDestinations,
     containsJumpMove,
-} from '../utils'
+} from '../game-utils'
 import { useSession } from '../api/session'
+import type { GameState } from '../game-state'
 
 const Game = ({ user }: { user: string }) => {
-    // Array with the state of each of the 32 playable dark tiles in the checkers board
-    const [tileStates, setTileStates] = useState<TileState[]>(
-        getNewBoardTileStates()
-    )
+    const [gameState, setGameState] = useState<GameState>({
+        status: 'SEARCHING',
+        tileStates: getNewBoardTileStates(),
+        playerColor: PlayerColor.BLACK,
+        isYourTurn: false,
+    })
+    const { status, tileStates, playerColor, isYourTurn } = gameState
     const session = useSession(user)
-    // Start with the WebSocket connection disabled until the user searches for a game
-    const [isInGame, setIsInGame] = useState(false)
-    const [statusMessage, setStatusMessage] = useState<string>()
-    const [playerColor, setPlayerColor] = useState(PlayerColor.BLACK)
-    const [isYourTurn, setIsYourTurn] = useState(false)
 
-    const updateIsYourTurn = (isYourTurn: boolean) => {
-        setIsYourTurn(isYourTurn)
-        setStatusMessage(isYourTurn ? 'Your turn!' : "Opponent's turn...")
+    const updateGameState = (updates: Partial<GameState>) => {
+        setGameState((prev) => ({ ...prev, ...updates }))
     }
 
     // Updates tileStates for a piece move
@@ -47,8 +45,8 @@ const Game = ({ user }: { user: string }) => {
             }
         }
 
-        setTileStates((prev) => {
-            const newTileStates = [...prev]
+        setGameState((prev) => {
+            const newTileStates = [...prev.tileStates]
 
             // Move piece from source to dest index
             newTileStates[destIndex] = newDestTileState
@@ -74,22 +72,24 @@ const Game = ({ user }: { user: string }) => {
                     !containsJumpMove(destIndex, newMoveDestinations[destIndex])
                 ) {
                     // Piece can't continue jumping, change the current player's turn
-                    updateIsYourTurn(!isYourTurn)
+                    updateGameState({ isYourTurn: !isYourTurn })
                 }
             } else {
                 // Normal move, change the current player's turn
-                updateIsYourTurn(!isYourTurn)
+                updateGameState({ isYourTurn: !isYourTurn })
             }
 
-            return newTileStates
+            return { ...prev, tileStates: newTileStates }
         })
     }
 
     session.on('start', (message) => {
         console.log(`Game started: ${message.player_color}`)
-        setIsInGame(true)
-        setPlayerColor(message.player_color)
-        updateIsYourTurn(message.player_color === PlayerColor.BLACK)
+        updateGameState({
+            status: 'IN_GAME',
+            playerColor: message.player_color,
+            isYourTurn: message.player_color === PlayerColor.BLACK,
+        })
     })
 
     session.on('move', (message) => {
@@ -123,14 +123,13 @@ const Game = ({ user }: { user: string }) => {
     return (
         <div className="space-y-6">
             <h1>CHECKERED</h1>
-            <GameBoard
-                tileStates={tileStates}
-                playerColor={playerColor}
-                isYourTurn={isYourTurn}
-                onPieceMove={handlePieceMove}
-            />
-            {!isInGame && <p>Searching for an opponent...</p>}
-            {statusMessage && <p className="text-2xl">{statusMessage}</p>}
+            <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
+            {status === 'SEARCHING' && <p>Searching for an opponent...</p>}
+            {status === 'IN_GAME' && (
+                <p className="text-2xl">
+                    {isYourTurn ? 'Your turn!' : "Opponent's turn..."}
+                </p>
+            )}
         </div>
     )
 }

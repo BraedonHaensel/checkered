@@ -1,6 +1,6 @@
 import React from 'react'
 import { PlayerColor, TileState } from '../enums'
-import { isBlackPiece, isKingPiece } from '../utils'
+import { isBlackPiece, isKingPiece } from '../game-utils'
 import Piece from './Piece'
 
 type LightTileProps = {
