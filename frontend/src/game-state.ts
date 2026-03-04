@@ -1,10 +1,18 @@
 import type { PlayerColor, TileState } from './enums'
 
-export type GameStatus = 'SEARCHING' | 'IN_GAME' | 'GAME_OVER'
+export type GameStatus =
+    | { state: 'SEARCHING' }
+    | { state: 'IN_GAME' }
+    | { state: 'FINISHED'; winner: PlayerColor | 'DRAW' }
 
 export interface GameState {
-    status: GameStatus
     tileStates: TileState[]
     playerColor: PlayerColor
     isYourTurn: boolean
+    previousMove:
+        | {
+              sourceIndex: number
+              destIndex: number
+          }
+        | undefined
 }

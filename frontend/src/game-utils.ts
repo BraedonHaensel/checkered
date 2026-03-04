@@ -25,6 +25,16 @@ export const isBlackPiece = (tileState: TileState) => {
 }
 
 /**
+ * Checks if the given tileState is for a black piece (standard or king).
+ */
+export const isRedPiece = (tileState: TileState) => {
+    return [
+        TileState.BLACK_STANDARD_PIECE,
+        TileState.BLACK_KING_PIECE,
+    ].includes(tileState)
+}
+
+/**
  * Checks if the given tileState is for a standard piece.
  */
 export const isStandardPiece = (tileState: TileState) => {
@@ -240,7 +250,7 @@ export const getPieceMoveDestinations = (
 }
 
 /**
- * Checks if a list of moves contains a jump move.
+ * Checks if the list of move destinations for a piece contains a jump move.
  */
 export const containsJumpMove = (
     tileIndex: number,
@@ -259,11 +269,39 @@ export const containsJumpMove = (
 export const getMoveDestinations = (
     tileStates: TileState[],
     playerColor: PlayerColor,
-    isYourTurn: boolean
+    isYourTurn: boolean,
+    previousMoveDestIndex: number | undefined
 ): number[][] => {
     if (!isYourTurn)
         // Not your turn so no possible moves, fill with empty arrays
         return Array.from({ length: tileStates.length }, () => [])
+
+    if (previousMoveDestIndex !== undefined) {
+        // Get the color of the player that performed the previous move
+        const previousMovePlayerColor = isBlackPiece(previousMoveDestIndex)
+            ? PlayerColor.BLACK
+            : PlayerColor.RED
+        if (previousMovePlayerColor === playerColor && isYourTurn) {
+            // It's still the player's turn, so they must be performing an additional jump with the
+            // piece at the previousMoveDestIndex
+            const pieceDestinations = getPieceMoveDestinations(
+                previousMoveDestIndex,
+                playerColor,
+                tileStates
+            )
+            // Filter for double jumps only
+            pieceDestinations.filter((destIndex) =>
+                isJumpMove(previousMoveDestIndex, destIndex)
+            )
+            const moveDestinations: number[][] = Array.from(
+                { length: tileStates.length },
+                () => []
+            )
+            // Return the move destinations where the previously moved piece must continue jumping
+            moveDestinations[previousMoveDestIndex] = pieceDestinations
+            return moveDestinations
+        }
+    }
 
     // Get the move destinations for each tile index
     let moveDestinations: number[][] = []
@@ -285,4 +323,39 @@ export const getMoveDestinations = (
     }
 
     return moveDestinations
+}
+
+/**
+ * Checks if a player has any legal moves, provided it is their turn.
+ */
+export const hasLegalMoves = (
+    tileStates: TileState[],
+    playerColor: PlayerColor
+) => {
+    // Get all of the player's moves
+    const playerMoveDestinations = getMoveDestinations(
+        tileStates,
+        playerColor,
+        true,
+        undefined
+    )
+    // Check if the player has any moves
+    const hasMove =
+        playerMoveDestinations.find(
+            (moveDestinations) => moveDestinations.length > 0
+        ) !== undefined
+    // If no moves, the player has lost
+    return !hasMove
+}
+
+/**
+ * Checks if a player has any pieces remaining.
+ */
+export const hasRemainingPieces = (
+    tileStates: TileState[],
+    playerColor: PlayerColor
+) => {
+    const isOwnedPiece =
+        playerColor === PlayerColor.BLACK ? isBlackPiece : isRedPiece
+    return tileStates.find((tileState) => isOwnedPiece(tileState)) !== undefined
 }

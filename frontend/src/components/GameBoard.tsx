@@ -13,7 +13,7 @@ type Props = {
 const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
 
-    const { tileStates, playerColor, isYourTurn } = gameState
+    const { tileStates, playerColor, isYourTurn, previousMove } = gameState
 
     useEffect(() => {
         // Clear selected piece after a board state change
@@ -23,8 +23,13 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
 
     // Array of arrays of valid move destinations for the piece on each tile
     const moveDestinations = useMemo(() => {
-        return getMoveDestinations(tileStates, playerColor, isYourTurn)
-    }, [tileStates, playerColor, isYourTurn])
+        return getMoveDestinations(
+            tileStates,
+            playerColor,
+            isYourTurn,
+            previousMove?.destIndex
+        )
+    }, [tileStates, playerColor, isYourTurn, previousMove])
 
     // Array of valid move destinations for the currently selected piece
     const selectedPieceMoveDestinations = useMemo(
