@@ -334,7 +334,10 @@ func hasRemainingPieces(tiles []TileState, color PieceColor) bool {
 	return false
 }
 
-func (game *Game) playMove(gameMove GameMove) {
+func (game *Game) playMove(gameMove GameMove) bool {
+	if(!game.isValidMove(gameMove)) {
+		return false;
+	}
 	newTileStates := make([]TileState, len(game.tileStates))
 	copy(newTileStates, game.tileStates)
 
@@ -373,7 +376,7 @@ func (game *Game) playMove(gameMove GameMove) {
 			game.previousMove = &gameMove
 
 			game.handleGameEnd()
-			return
+			return true
 		}
 
 		newMoveDestinations := getMoveDestinations(newTileStates, PieceColor(currentPlayerColor), &gameMove.To)
@@ -383,7 +386,7 @@ func (game *Game) playMove(gameMove GameMove) {
 			game.previousMove = &gameMove
 
 			game.handleGameEnd()
-			return
+			return true
 		}
 	}
 
@@ -392,12 +395,14 @@ func (game *Game) playMove(gameMove GameMove) {
 		game.previousMove = &gameMove
 
 		game.handleGameEnd()
-		return
+		return true
 	}
 
 	game.tileStates = newTileStates
 	game.turn = PieceColor(waitingPlayerColor)
 	game.previousMove = &gameMove
+
+	return true
 }
 
 func (game *Game) isValidMove(gameMove GameMove) bool {
