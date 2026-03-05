@@ -24,7 +24,7 @@ type Server struct {
 	// we map username to client
 	clients map[string]*Client
 	// games that new clients are in
-	games       map[uuid.UUID]*GameRoom
+	games       map[uuid.UUID]*Game
 	readyQueue  Queue[*Client]
 	leaderboard *Leaderboard
 
@@ -39,7 +39,7 @@ var addr = flag.String("addr", ":8080", "http service address")
 func InitServer() *Server {
 	server := Server{
 		clients:     make(map[string]*Client),
-		games:       make(map[uuid.UUID]*GameRoom),
+		games:       make(map[uuid.UUID]*Game),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
 		leaderboard: &Leaderboard{},
@@ -115,12 +115,14 @@ func (server *Server) serverLoop() {
 			redPlayer := Dequeue(&server.readyQueue)
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-			gameRoom := GameRoom{
-				redPlayer:   redPlayer,
-				blackPlayer: blackPlayer,
-				gameID:      uuid.New(),
-				GameState:   &Game{},
-				resultChan:  server.gameResults,
+			gameRoom := Game{
+				gameID:       uuid.New(),
+				redPlayer:    redPlayer,
+				blackPlayer:  blackPlayer,
+				tileStates:   generateInitialTileStates(),
+				turn:         Red,
+				previousMove: nil,
+				resultChan:   server.gameResults,
 			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game

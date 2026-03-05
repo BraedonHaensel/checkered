@@ -19,7 +19,7 @@ type Client struct {
 	// either INGAME, QUEUING, SPECTATING or IDLE
 	status string
 	// the the current game that they are playing
-	currentGame *GameRoom
+	currentGame *Game
 
 	// used to send messages to the client via websocket
 	send chan []byte
@@ -106,23 +106,45 @@ func (c *Client) handleFoundGame(p FoundGame) {
 	panic("unimplemented")
 }
 
-func (c *Client) handleNewMove(gameMove GameMove) {
-	gameMoveBytes, err := json.Marshal(gameMove)
+type GameStateUpdate struct {
+	Kind         string      `json:"type"`
+	TileStates   []TileState `json:"tile_states"`
+	Turn         string      `json:"turn"`
+	PreviousMove *GameMove   `json:"previous_move,omitempty"`
+}
+
+func (c *Client) handleNewMove(p GameMove) {
+
+	validMove := c.currentGame.playMove(p)
+
+	newState := GameStateUpdate{
+		Kind:         "update_state",
+		TileStates:   c.currentGame.tileStates,
+		Turn:         "red",
+		PreviousMove: c.currentGame.previousMove,
+	}
+
+	if c.currentGame.turn == Black {
+		newState.Turn = "black"
+	}
+
+	gameStateBytes, err := json.Marshal(newState)
 	if err != nil {
 		log.Printf("Error at Marshalling\n")
 		return
 	}
-	// TODO: make sure that it is the current players turn
-	if !c.currentGame.playMove(gameMove) {
-		// don't send anything to anyone, the client is sending
-		// an invalid move
-		return
-	}
-	if c.currentGame.redPlayer.username == c.username {
-		c.currentGame.blackPlayer.send <- gameMoveBytes
+	if !validMove {
+		c.send <- gameStateBytes
 	} else {
-		c.currentGame.redPlayer.send <- gameMoveBytes
+		otherPlayer(c.username, c.currentGame).send <- gameStateBytes
 	}
+}
+
+func otherPlayer(username string, game *Game) *Client {
+	if game.blackPlayer.username == username {
+		return game.redPlayer
+	}
+	return game.blackPlayer
 }
 
 func NewClient(username string, connection *websocket.Conn) Client {

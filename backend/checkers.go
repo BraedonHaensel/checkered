@@ -1,84 +1,504 @@
 package main
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/google/uuid"
 )
 
+type TileState int
+type PieceColor int
+type MoveDirection int
+
+const (
+	Empty = iota
+	RedStandardPiece
+	RedKingPiece
+	BlackStandardPiece
+	BlackKingPiece
+)
+
+const (
+	Black = iota
+	Red
+)
+
+const (
+	UpLeft = iota
+	UpRight
+	DownLeft
+	DownRight
+)
+
 type Game struct {
-	gameID      string
-	redPlayer   string
-	blackPlayer string
+	gameID       uuid.UUID
+	redPlayer    *Client
+	blackPlayer  *Client
+	tileStates   []TileState
+	turn         PieceColor
+	previousMove *GameMove
+	resultChan   chan GameResult
 }
 
-type GameRoom struct {
-	gameID      uuid.UUID
-	redPlayer   *Client
-	blackPlayer *Client
-	GameState   *Game
-	resultChan  chan GameResult
+func generateInitialTileStates() []TileState {
+	tileStates := make([]TileState, 32)
+
+	for i := range tileStates {
+		if i < 12 {
+			tileStates[i] = RedStandardPiece
+		} else if i < 20 {
+			tileStates[i] = Empty
+		} else {
+			tileStates[i] = BlackStandardPiece
+		}
+	}
+
+	return tileStates
 }
 
-// checks if the game has finished
-// returns (true, winner_username, loser_username)
-// if the game is finished
-// returns (false, "", "") otherwise
-func (gameRoom *GameRoom) finishedGame() (bool, string, string) {
-	// TODO: implement
-	return false, "", ""
-}
-
-// updates the game state to play the gameMove
-// checks that it is a valid move before playing
-// and if it returns true then the move has been
-// played and the gamestate has been updated,
-// otherwise the move was not valid and the
-// gamestate is still the same. If the game is over
-// then the gameroom will send the result of the game
-// to the server loop via resultChan
-func (gameRoom *GameRoom) playMove(gameMove GameMove) bool {
-	if !gameRoom.isValidMove(gameMove) {
+func isBlackPiece(state TileState) bool {
+	switch state {
+	case BlackStandardPiece:
+		return true
+	case BlackKingPiece:
+		return true
+	default:
 		return false
 	}
-	// TODO: implement
+}
 
-	// check if the game is finished after playing the move
-	is_finished, winner, loser := gameRoom.finishedGame()
-	if is_finished {
-		result := GameResult{
-			gameID: gameRoom.gameID,
-			winner: winner,
-			loser:  loser,
-		}
-		gameRoom.resultChan <- result
-		// set the players current game to null
-		gameRoom.blackPlayer.currentGame = nil
-		gameRoom.redPlayer.currentGame = nil
-
+func isRedPiece(state TileState) bool {
+	switch state {
+	case RedStandardPiece:
+		return true
+	case RedKingPiece:
+		return true
+	default:
+		return false
 	}
+}
+
+func isStandardPiece(state TileState) bool {
+	switch state {
+	case RedStandardPiece:
+		return true
+	case BlackStandardPiece:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKingPiece(state TileState) bool {
+	switch state {
+	case RedKingPiece:
+		return true
+	case BlackKingPiece:
+		return true
+	default:
+		return false
+	}
+}
+
+func tileIndexToRow(index int) int {
+	return int(math.Floor(float64(index) / 4.0))
+}
+
+func isOffsetRow(row int) bool {
+	return row%2 == 0
+}
+
+func tileIndexToCol(index int) int {
+	col := (index % 4) * 2
+	offset := 0
+	if tileIndexToRow(index)%2 == 0 {
+		offset = 1
+	}
+	return col + offset
+}
+
+func isUpwardMoveDirection(direction MoveDirection) bool {
+	switch direction {
+	case UpLeft:
+		return true
+	case UpRight:
+		return true
+	default:
+		return false
+	}
+}
+
+func isLeftwardMoveDiretion(direction MoveDirection) bool {
+	switch direction {
+	case UpLeft:
+		return true
+	case DownLeft:
+		return true
+	default:
+		return false
+	}
+}
+
+func isJumpMove(from int, to int) bool {
+	distance := to - from
+
+	return int(math.Abs(float64(distance))) >= 7
+}
+
+func getMoveAmountForDirection(direction MoveDirection, isOffsetRow bool, isJump bool) int {
+	if isUpwardMoveDirection(direction) {
+		if isLeftwardMoveDiretion(direction) {
+			// Up left move
+			if isJump {
+				return -9
+			} else if isOffsetRow {
+				return -4
+			} else {
+				return -5
+			}
+		}
+		// Up right move
+		if isJump {
+			return -7
+		} else if isOffsetRow {
+			return -3
+		} else {
+			return -4
+		}
+	}
+	if isLeftwardMoveDiretion(direction) {
+		if isJump {
+			return 7
+		} else if isOffsetRow {
+			return 4
+		} else {
+			return 3
+		}
+	}
+	if isJump {
+		return 9
+	} else if isOffsetRow {
+		return 5
+	} else {
+		return 4
+	}
+}
+
+func getMoveDirectionByDistance(distance int) MoveDirection {
+	if distance == -9 {
+		return UpLeft
+	}
+	if distance == -7 {
+		return UpRight
+	}
+	if distance == 7 {
+		return DownLeft
+	}
+	return DownRight
+}
+
+func getJumpedIndex(from int, to int) int {
+	if !isJumpMove(from, to) {
+		panic("Invalid jump move")
+	}
+
+	distance := to - from
+	direction := getMoveDirectionByDistance(distance)
+
+	return (from + getMoveAmountForDirection(direction, isOffsetRow(tileIndexToRow(from)), false))
+}
+
+func getMoveDestinationInDirection(index int, color PieceColor, tiles []TileState, direction MoveDirection) *int {
+	row := tileIndexToRow(index)
+	upwards := isUpwardMoveDirection(direction)
+	if upwards && row == 0 {
+		return nil
+	}
+	if !upwards && row == 7 {
+		return nil
+	}
+
+	col := tileIndexToCol(index)
+	leftward := isLeftwardMoveDiretion(direction)
+	if leftward && col == 0 {
+		return nil
+	}
+	if !leftward && col == 7 {
+		return nil
+	}
+
+	moveAmount := getMoveAmountForDirection(direction, isOffsetRow(row), false)
+	dest := index + moveAmount
+
+	if tiles[dest] == Empty {
+		return &dest
+	}
+
+	if upwards && row <= 1 {
+		return nil
+	}
+	if !upwards && row >= 6 {
+		return nil
+	}
+
+	if leftward && col <= 1 {
+		return nil
+	}
+	if !leftward && col >= 6 {
+		return nil
+	}
+
+	isBlack := color == Black
+	isJumpingBlack := isBlackPiece(tiles[dest])
+
+	if isBlack == isJumpingBlack {
+		return nil
+	}
+
+	moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row), true)
+	dest = index + moveAmount
+
+	if tiles[dest] == Empty {
+		return &dest
+	}
+
+	return nil
+}
+
+func getPieceMoveDestinations(index int, color PieceColor, tiles []TileState) []int {
+	state := tiles[index]
+
+	if state == Empty {
+		return make([]int, 0)
+	}
+
+	if color == Black {
+		if !isBlackPiece(state) {
+			return make([]int, 0)
+		}
+	} else {
+		if isBlackPiece(state) {
+			return make([]int, 0)
+		}
+	}
+
+	moveDirections := make([]MoveDirection, 0)
+
+	if isBlackPiece(state) || isKingPiece(state) {
+		moveDirections = append(moveDirections, UpLeft)
+		moveDirections = append(moveDirections, UpRight)
+	}
+	if !isBlackPiece(state) || isKingPiece(state) {
+		moveDirections = append(moveDirections, DownLeft)
+		moveDirections = append(moveDirections, DownRight)
+	}
+
+	moveDestinations := make([]int, 0)
+
+	for _, direction := range moveDirections {
+		dest := getMoveDestinationInDirection(index, color, tiles, direction)
+		if dest != nil {
+			moveDestinations = append(moveDestinations, *dest)
+		}
+	}
+
+	return moveDestinations
+}
+
+func containsJumpMove(index int, moveDestinations []int) bool {
+	for _, dest := range moveDestinations {
+		if isJumpMove(index, dest) {
+			return true
+		}
+	}
+	return false
+}
+
+func getMoveDestinations(tiles []TileState, color PieceColor, prevMoveDestIndex *int) [][]int {
+	if prevMoveDestIndex != nil {
+		prevMoveColor := Red
+		if isBlackPiece(tiles[*prevMoveDestIndex]) {
+			prevMoveColor = Black
+		}
+
+		if PieceColor(prevMoveColor) == color {
+			tmpPieceDestinations := getPieceMoveDestinations(*prevMoveDestIndex, color, tiles)
+			pieceDestinations := make([]int, 0)
+
+			for _, dest := range tmpPieceDestinations {
+				if isJumpMove(*prevMoveDestIndex, dest) {
+					pieceDestinations = append(pieceDestinations, dest)
+				}
+			}
+
+			moveDestinations := make([][]int, len(tiles))
+			moveDestinations[*prevMoveDestIndex] = pieceDestinations
+
+			return moveDestinations
+		}
+	}
+
+	moveDestinations := make([][]int, 0)
+	for index := range tiles {
+		moveDestinations = append(moveDestinations, getPieceMoveDestinations(index, color, tiles))
+	}
+
+	fmt.Printf("%v\n", moveDestinations)
+
+	hasJump := false
+	for index, moves := range moveDestinations {
+		if containsJumpMove(index, moves) {
+			hasJump = true
+			break
+		}
+	}
+
+	if hasJump {
+		for i := range moveDestinations {
+			old := moveDestinations[i]
+			moveDestinations[i] = make([]int, 0)
+
+			for _, dest := range old {
+				if isJumpMove(i, dest) {
+					moveDestinations[i] = append(moveDestinations[i], dest)
+				}
+			}
+		}
+	}
+
+	return moveDestinations
+}
+
+func hasLegalMoves(tiles []TileState, color PieceColor) bool {
+	playerMoveDestinations := getMoveDestinations(tiles, color, nil)
+
+	for _, dests := range playerMoveDestinations {
+		if len(dests) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasRemainingPieces(tiles []TileState, color PieceColor) bool {
+	for _, state := range tiles {
+		if color == Black && isBlackPiece(state) {
+			return true
+		}
+		if color == Red && isRedPiece(state) {
+			return true
+		}
+	}
+	return false
+}
+
+func (game *Game) playMove(gameMove GameMove) bool {
+	if !game.isValidMove(gameMove) {
+		return false
+	}
+	newTileStates := make([]TileState, len(game.tileStates))
+	copy(newTileStates, game.tileStates)
+
+	// Check state of the moved piece
+	newPieceState := newTileStates[gameMove.From]
+	isBlackMove := isBlackPiece(newPieceState)
+
+	// Check for a promotion from a standard to crown piece
+	if isStandardPiece(newPieceState) {
+		destRow := tileIndexToRow(gameMove.To)
+		if isBlackMove && destRow == 0 {
+			newPieceState = BlackKingPiece
+		} else if !isBlackMove && destRow == 7 {
+			newPieceState = RedKingPiece
+		}
+	}
+
+	newTileStates[gameMove.To] = newPieceState
+	newTileStates[gameMove.From] = Empty
+
+	currentPlayerColor := Red
+	waitingPlayerColor := Black
+	if isBlackMove {
+		currentPlayerColor = Black
+		waitingPlayerColor = Red
+	}
+
+	isJump := isJumpMove(gameMove.From, gameMove.To)
+
+	if isJump {
+		jumpedIndex := getJumpedIndex(gameMove.From, gameMove.To)
+		newTileStates[jumpedIndex] = Empty
+
+		if !hasRemainingPieces(newTileStates, PieceColor(waitingPlayerColor)) {
+			game.tileStates = newTileStates
+			game.previousMove = &gameMove
+
+			game.handleGameEnd()
+			return true
+		}
+
+		newMoveDestinations := getMoveDestinations(newTileStates, PieceColor(currentPlayerColor), &gameMove.To)
+
+		if containsJumpMove(gameMove.To, newMoveDestinations[gameMove.To]) {
+			game.tileStates = newTileStates
+			game.previousMove = &gameMove
+
+			game.handleGameEnd()
+			return true
+		}
+	}
+
+	if !hasLegalMoves(newTileStates, PieceColor(waitingPlayerColor)) {
+		game.tileStates = newTileStates
+		game.previousMove = &gameMove
+
+		game.handleGameEnd()
+		return true
+	}
+
+	game.tileStates = newTileStates
+	game.turn = PieceColor(waitingPlayerColor)
+	game.previousMove = &gameMove
+
 	return true
 }
 
-// checks if the game move is a valid move
-func (gameRoom *GameRoom) isValidMove(_ GameMove) bool {
-	// TODO: implement
-	return true
+func (game *Game) isValidMove(gameMove GameMove) bool {
+	color := Red
+	if isBlackPiece(game.tileStates[gameMove.From]) {
+		color = Black
+	}
+	var prevMove *int = nil
+	if game.previousMove != nil {
+		prevMove = &game.previousMove.To
+	}
+	allValidMoves := getMoveDestinations(game.tileStates, PieceColor(color), prevMove)
+
+	validMoves := allValidMoves[gameMove.From]
+
+	// Check if the move that was made is in the list of valid moves starting
+	// from the From index
+	for _, dest := range validMoves {
+		if dest == gameMove.To {
+			return true
+		}
+	}
+
+	return false
 }
 
-func (gameRoom *GameRoom) messageFromNewGame(playerKind string) FoundGame {
+func (game *Game) handleGameEnd() {
+	//TODO
+	panic("not implemented!")
+}
+
+func (game *Game) messageFromNewGame(playerKind string) FoundGame {
 	return FoundGame{
 		Kind: "start",
 		Side: playerKind,
 	}
-}
-
-func otherPlayer(playerKind string) string {
-	if playerKind == "red" {
-		return "black"
-	}
-	if playerKind == "black" {
-		return "red"
-	}
-	return "error"
 }
 
 type GameMove struct {

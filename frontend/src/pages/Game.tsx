@@ -5,7 +5,7 @@ import {
     getNewBoardTileStates,
     isJumpMove,
     isStandardPiece,
-    getJumpedIndex,
+    getJumpedTileIndex,
     tileIndexToRow,
     isBlackPiece,
     getMoveDestinations,
@@ -67,15 +67,11 @@ const Game = ({ user }: { user: string }) => {
             const isJump = isJumpMove(sourceIndex, destIndex)
             if (isJump) {
                 // Remove the jumped piece
-                const jumpedIndex = getJumpedIndex(sourceIndex, destIndex)
+                const jumpedIndex = getJumpedTileIndex(sourceIndex, destIndex)
                 newTileStates[jumpedIndex] = TileState.EMPTY
 
                 // Check if the game is finished due to the jumped waiting player being out of pieces
                 if (!hasRemainingPieces(newTileStates, waitingPlayerColor)) {
-                    setGameStatus({
-                        state: 'FINISHED',
-                        winner: currentPlayerColor,
-                    })
                     return {
                         ...prev,
                         tileStates: newTileStates,
@@ -113,11 +109,6 @@ const Game = ({ user }: { user: string }) => {
 
             // Waiting player's turn next. Check if they are out of moves
             if (!hasLegalMoves(newTileStates, waitingPlayerColor)) {
-                // Game over, waiting player is out of moves
-                setGameStatus({
-                    state: 'FINISHED',
-                    winner: currentPlayerColor,
-                })
                 return {
                     ...prev,
                     tileStates: newTileStates,
@@ -151,12 +142,17 @@ const Game = ({ user }: { user: string }) => {
         })
     })
 
-    session.on('move', (message) => {
-        console.log(
-            `Received move: ${message.source_index} to ${message.destination_index}`
-        )
-        // TODO simple implementation, will likely need more logic
-        performPieceMove(message.source_index, message.destination_index)
+    session.on("update_state", (message) => {
+        console.log(`Update State`, message)
+        setGameState((oldState: GameState) => ({
+            ...oldState,
+            tileStates: message.tile_states,
+            previousMove: message.previous_move ? {
+                sourceIndex: message.previous_move.source_index,
+                destIndex: message.previous_move.destination_index,
+            } : message.previous_move,
+            isYourTurn: message.turn == oldState.playerColor
+        }))
     })
 
     const handlePieceMove = (
