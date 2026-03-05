@@ -12,8 +12,8 @@ type Leaderboard struct {
 
 type LeaderboardEntry struct {
 	Username string `json:"username"`
-	Wins     int `json:"wins"`
-	Losses   int `json:"losses"`
+	Wins     int    `json:"wins"`
+	Losses   int    `json:"losses"`
 }
 
 func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
@@ -25,8 +25,8 @@ func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
 
 	lb.Board = append(lb.Board, LeaderboardEntry{
 		Username: username,
-		Wins: 0,
-		Losses: 0,
+		Wins:     0,
+		Losses:   0,
 	})
 }
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"math"
 
 	"github.com/google/uuid"
@@ -487,9 +487,45 @@ func (game *Game) isValidMove(gameMove GameMove) bool {
 	return false
 }
 
+// assuming that the game has ended return the winner as
+// a string
+func (game *Game) currentWinner() string {
+	if game.turn == Red {
+		return "red"
+	} else {
+		return "black"
+	}
+}
+
 func (game *Game) handleGameEnd() {
-	//TODO
-	panic("not implemented!")
+
+	winner := game.currentWinner()
+	endMessage := GameEndMessage{
+		Kind:   "game_end",
+		Winner: winner,
+	}
+	endMessageJson, err := json.Marshal(endMessage)
+	if err != nil {
+		panic("Marshalling Error")
+	}
+	game.blackPlayer.send <- endMessageJson
+	game.redPlayer.send <- endMessageJson
+	var winnerUsername string
+	var loserUsername string
+	if winner == "red" {
+		winnerUsername = game.redPlayer.username
+		loserUsername = game.blackPlayer.username
+	} else {
+		winnerUsername = game.blackPlayer.username
+		loserUsername = game.redPlayer.username
+	}
+	// tell the server the result to update the leaderboard
+	gameResult := GameResult{
+		gameID: game.gameID,
+		winner: winnerUsername,
+		loser:  loserUsername,
+	}
+	game.resultChan <- gameResult
 }
 
 func (game *Game) messageFromNewGame(playerKind string) FoundGame {

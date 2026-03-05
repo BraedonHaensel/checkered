@@ -113,6 +113,11 @@ type GameStateUpdate struct {
 	PreviousMove *GameMove   `json:"previous_move,omitempty"`
 }
 
+type GameEndMessage struct {
+	Kind   string `json:"type"`
+	Winner string `json:"winner"`
+}
+
 func (c *Client) handleNewMove(p GameMove) {
 
 	validMove := c.currentGame.playMove(p)
