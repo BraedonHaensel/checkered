@@ -81,8 +81,6 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 	// let the server know and handle the new client
 	server.register <- &client
 
-	log.Printf("Client connected\n")
-
 }
 
 // main idea of this loop is to register new active users and put them
@@ -135,7 +133,7 @@ func (server *Server) serverLoop() {
 			redPlayer := Dequeue(&server.readyQueue)
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
+			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer, gameID: uuid.New()}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
 			redMessage := gameRoom.messageFromNewGame("red")

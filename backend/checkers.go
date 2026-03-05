@@ -27,8 +27,8 @@ func (gameRoom *GameRoom) isValidMove(gameMove GameMove) bool {
 
 func (gameRoom *GameRoom) messageFromNewGame(playerKind string) FoundGame {
 	return FoundGame{
-		GameID: gameRoom.gameID.String(),
-		Side:   playerKind,
+		Kind: "start",
+		Side: playerKind,
 	}
 }
 
