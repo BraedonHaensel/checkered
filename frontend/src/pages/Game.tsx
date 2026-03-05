@@ -5,7 +5,7 @@ import {
     getNewBoardTileStates,
     isJumpMove,
     isStandardPiece,
-    getJumpedIndex,
+    getJumpedTileIndex,
     tileIndexToRow,
     isBlackPiece,
     getMoveDestinations,
@@ -67,7 +67,7 @@ const Game = ({ user }: { user: string }) => {
             const isJump = isJumpMove(sourceIndex, destIndex)
             if (isJump) {
                 // Remove the jumped piece
-                const jumpedIndex = getJumpedIndex(sourceIndex, destIndex)
+                const jumpedIndex = getJumpedTileIndex(sourceIndex, destIndex)
                 newTileStates[jumpedIndex] = TileState.EMPTY
 
                 // Check if the game is finished due to the jumped waiting player being out of pieces
