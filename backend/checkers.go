@@ -31,7 +31,7 @@ const (
 )
 
 type Game struct {
-	gameID      	string
+	gameID      	uuid.UUID
 	redPlayer   	*Client
 	blackPlayer 	*Client
 	tileStates  	[]TileState
@@ -432,16 +432,15 @@ func (game *Game) handleGameEnd() {
 
 func (game *Game) messageFromNewGame(playerKind string) FoundGame {
 	return FoundGame{
-		GameID: game.gameID,
-		Side:   playerKind,
+		Kind: "start",
+		Side: playerKind,
 	}
 }
 
 type GameMove struct {
-	GameID uuid.UUID `json:"game_id"`
-	UserID uuid.UUID `json:"user_id"`
-	From   int       `json:"from"`
-	To     int       `json:"to"`
+	Kind string `json:"type"`
+	From int    `json:"source_index"`
+	To   int    `json:"destination_index"`
 }
 
 type GameResult struct {
