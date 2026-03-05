@@ -106,10 +106,16 @@ func (c *Client) handleFoundGame(p FoundGame) {
 	panic("unimplemented")
 }
 
-func (c *Client) handleNewMove(p GameMove) {
-	gameMoveBytes, err := json.Marshal(p)
+func (c *Client) handleNewMove(gameMove GameMove) {
+	gameMoveBytes, err := json.Marshal(gameMove)
 	if err != nil {
 		log.Printf("Error at Marshalling\n")
+		return
+	}
+	// TODO: make sure that it is the current players turn
+	if !c.currentGame.playMove(gameMove) {
+		// don't send anything to anyone, the client is sending
+		// an invalid move
 		return
 	}
 	if c.currentGame.redPlayer.username == c.username {

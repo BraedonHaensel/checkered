@@ -31,6 +31,7 @@ type Server struct {
 	register     chan *Client
 	unregister   chan *Client
 	moveReceiver chan GameMove
+	gameResults  chan GameResult
 }
 
 var addr = flag.String("addr", ":8080", "http service address")
@@ -42,6 +43,7 @@ func InitServer() *Server {
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
 		leaderboard: &Leaderboard{},
+		gameResults: make(chan GameResult, 10),
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
@@ -104,6 +106,8 @@ func (server *Server) serverLoop() {
 				unregister.username,
 			)
 			// TODO: remove client from game rooms
+		case gameResult := <-server.gameResults:
+			server.leaderboard.UpdateLeaderboard(gameResult)
 		default:
 			if server.readyQueue.size < 2 {
 				break
@@ -111,7 +115,13 @@ func (server *Server) serverLoop() {
 			redPlayer := Dequeue(&server.readyQueue)
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer, gameID: uuid.New()}
+			gameRoom := GameRoom{
+				redPlayer:   redPlayer,
+				blackPlayer: blackPlayer,
+				gameID:      uuid.New(),
+				GameState:   &Game{},
+				resultChan:  server.gameResults,
+			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
 			redMessage := gameRoom.messageFromNewGame("red")
@@ -141,7 +151,7 @@ func main() {
 	server.leaderboard.AddPlayerToLeaderboard("akeuben")
 	server.leaderboard.AddPlayerToLeaderboard("test")
 	server.leaderboard.UpdateLeaderboard(GameResult{
-		gameID: "test",
+		gameID: uuid.New(),
 		winner: "akeuben",
 		loser:  "test",
 	})

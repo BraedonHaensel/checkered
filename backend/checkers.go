@@ -15,14 +15,53 @@ type GameRoom struct {
 	redPlayer   *Client
 	blackPlayer *Client
 	GameState   *Game
+	resultChan  chan GameResult
 }
 
-func (gameRoom *GameRoom) playMove(gameMove GameMove) {
-	panic("unimplemented")
+// checks if the game has finished
+// returns (true, winner_username, loser_username)
+// if the game is finished
+// returns (false, "", "") otherwise
+func (gameRoom *GameRoom) finishedGame() (bool, string, string) {
+	// TODO: implement
+	return false, "", ""
 }
 
-func (gameRoom *GameRoom) isValidMove(gameMove GameMove) bool {
-	panic("unimplemented")
+// updates the game state to play the gameMove
+// checks that it is a valid move before playing
+// and if it returns true then the move has been
+// played and the gamestate has been updated,
+// otherwise the move was not valid and the
+// gamestate is still the same. If the game is over
+// then the gameroom will send the result of the game
+// to the server loop via resultChan
+func (gameRoom *GameRoom) playMove(gameMove GameMove) bool {
+	if !gameRoom.isValidMove(gameMove) {
+		return false
+	}
+	// TODO: implement
+
+	// check if the game is finished after playing the move
+	is_finished, winner, loser := gameRoom.finishedGame()
+	if is_finished {
+		result := GameResult{
+			gameID: gameRoom.gameID,
+			winner: winner,
+			loser:  loser,
+		}
+		gameRoom.resultChan <- result
+		// set the players current game to null
+		gameRoom.blackPlayer.currentGame = nil
+		gameRoom.redPlayer.currentGame = nil
+
+	}
+	return true
+}
+
+// checks if the game move is a valid move
+func (gameRoom *GameRoom) isValidMove(_ GameMove) bool {
+	// TODO: implement
+	return true
 }
 
 func (gameRoom *GameRoom) messageFromNewGame(playerKind string) FoundGame {
@@ -49,7 +88,7 @@ type GameMove struct {
 }
 
 type GameResult struct {
-	gameID string
+	gameID uuid.UUID
 	// username of the winner
 	winner string
 	// username of the loser
