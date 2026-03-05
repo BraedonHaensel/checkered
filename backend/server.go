@@ -30,7 +30,6 @@ type Server struct {
 
 	register     chan *Client
 	unregister   chan *Client
-	newGame      chan *GameRoom
 	moveReceiver chan GameMove
 }
 
@@ -42,7 +41,6 @@ func InitServer() *Server {
 		games:       make(map[uuid.UUID]*GameRoom),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
-		newGame:     make(chan *GameRoom),
 		leaderboard: &Leaderboard{},
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
@@ -99,6 +97,8 @@ func (server *Server) serverLoop() {
 				"New client \"%s\"",
 				new_client.username,
 			)
+			// queue the new client into a game
+			Enqueue(&server.readyQueue, new_client)
 		case unregister := <-server.unregister:
 			delete(server.clients, unregister.username)
 			log.Printf(
@@ -106,23 +106,6 @@ func (server *Server) serverLoop() {
 				unregister.username,
 			)
 			// TODO: remove client from game rooms
-		case newGame := <-server.newGame:
-			// tell both servers about the new game
-			redMessage := newGame.messageFromNewGame("red")
-			blackMessage := newGame.messageFromNewGame("black")
-			redBytes, err := json.Marshal(redMessage)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			blackBytes, err := json.Marshal(blackMessage)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			// send the message that they have found a game to both players
-			server.clients[newGame.blackPlayer.username].send <- blackBytes
-			server.clients[newGame.redPlayer.username].send <- redBytes
 		case gameMove := <-server.moveReceiver:
 			// TODO: check if the game exists, check if the user is using the same term
 			gameState := server.games[gameMove.GameID]
@@ -146,13 +129,30 @@ func (server *Server) serverLoop() {
 				server.clients[gameState.blackPlayer.username].send <- message
 			}
 		default:
-			if server.readyQueue.size >= 2 {
-				redPlayer := Dequeue(&server.readyQueue)
-				blackPlayer := Dequeue(&server.readyQueue)
-				log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-				gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
-				server.newGame <- &gameRoom
+			if server.readyQueue.size < 2 {
+				break
 			}
+			redPlayer := Dequeue(&server.readyQueue)
+			blackPlayer := Dequeue(&server.readyQueue)
+			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
+			gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
+			server.games[gameRoom.gameID] = &gameRoom
+			// tell both servers about the new game
+			redMessage := gameRoom.messageFromNewGame("red")
+			blackMessage := gameRoom.messageFromNewGame("black")
+			redBytes, err := json.Marshal(redMessage)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			blackBytes, err := json.Marshal(blackMessage)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			// send the message that they have found a game to both players
+			server.clients[gameRoom.blackPlayer.username].send <- blackBytes
+			server.clients[gameRoom.redPlayer.username].send <- redBytes
 		}
 	}
 }
