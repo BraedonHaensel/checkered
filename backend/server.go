@@ -24,13 +24,13 @@ type Server struct {
 	// we map uuid to client
 	clients map[uuid.UUID]*Client
 	// games that new clients are in
-	games       map[uuid.UUID]*GameRoom
+	games       map[uuid.UUID]*Game
 	readyQueue  Queue[*Client]
 	leaderboard *Leaderboard
 
 	register     chan *Client
 	unregister   chan *Client
-	newGame      chan *GameRoom
+	newGame      chan *Game
 	moveReceiver chan GameMove
 }
 
@@ -39,10 +39,10 @@ var addr = flag.String("addr", ":8080", "http service address")
 func InitServer() *Server {
 	server := Server{
 		clients:      make(map[uuid.UUID]*Client),
-		games:        make(map[uuid.UUID]*GameRoom),
+		games:        make(map[uuid.UUID]*Game),
 		register:     make(chan *Client),
 		unregister:   make(chan *Client),
-		newGame:      make(chan *GameRoom),
+		newGame:      make(chan *Game),
 		moveReceiver: make(chan GameMove),
 		leaderboard:  &Leaderboard{},
 	}
@@ -141,7 +141,7 @@ func (server *Server) serverLoop() {
 				redPlayer := Dequeue(&server.readyQueue)
 				blackPlayer := Dequeue(&server.readyQueue)
 				log.Printf("New game created (red: %s, black: %s)\n", redPlayer.Uuid, blackPlayer.Uuid)
-				gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
+				gameRoom := Game{redPlayer: redPlayer, blackPlayer: blackPlayer}
 				server.newGame <- &gameRoom
 			}
 		}

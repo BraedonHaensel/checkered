@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"math"
 
 	"github.com/google/uuid"
@@ -431,16 +430,6 @@ func (game *Game) messageFromNewGame(playerKind string) FoundGame {
 		GameID: game.gameID,
 		Side:   playerKind,
 	}
-}
-
-func otherPlayer(playerKind string) string {
-	if playerKind == "red" {
-		return "black"
-	}
-	if playerKind == "black" {
-		return "red"
-	}
-	return "error"
 }
 
 type GameMove struct {
