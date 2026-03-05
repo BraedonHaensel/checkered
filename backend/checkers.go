@@ -344,8 +344,6 @@ func getMoveDestinations(tiles []TileState, color PieceColor, prevMoveDestIndex 
 		moveDestinations = append(moveDestinations, getPieceMoveDestinations(index, color, tiles))
 	}
 
-	fmt.Printf("%v\n", moveDestinations)
-
 	hasJump := false
 	for index, moves := range moveDestinations {
 		if containsJumpMove(index, moves) {
