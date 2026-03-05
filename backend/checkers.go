@@ -11,7 +11,7 @@ type Game struct {
 }
 
 type GameRoom struct {
-	gameID      string
+	gameID      uuid.UUID
 	redPlayer   *Client
 	blackPlayer *Client
 	GameState   *Game
@@ -27,8 +27,8 @@ func (gameRoom *GameRoom) isValidMove(gameMove GameMove) bool {
 
 func (gameRoom *GameRoom) messageFromNewGame(playerKind string) FoundGame {
 	return FoundGame{
-		GameID: gameRoom.gameID,
-		Side:   playerKind,
+		Kind: "start",
+		Side: playerKind,
 	}
 }
 
@@ -43,10 +43,9 @@ func otherPlayer(playerKind string) string {
 }
 
 type GameMove struct {
-	GameID uuid.UUID `json:"game_id"`
-	UserID uuid.UUID `json:"user_id"`
-	From   int       `json:"from"`
-	To     int       `json:"to"`
+	Kind string `json:"type"`
+	From int    `json:"source_index"`
+	To   int    `json:"destination_index"`
 }
 
 type GameResult struct {
