@@ -43,10 +43,9 @@ func otherPlayer(playerKind string) string {
 }
 
 type GameMove struct {
-	GameID   uuid.UUID `json:"game_id"`
-	Username string    `json:"user"`
-	From     int       `json:"from"`
-	To       int       `json:"to"`
+	Kind string `json:"type"`
+	From int    `json:"source_index"`
+	To   int    `json:"destination_index"`
 }
 
 type GameResult struct {

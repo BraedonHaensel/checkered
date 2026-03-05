@@ -73,7 +73,7 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn, server.moveReceiver)
+	client := NewClient(registerMessage.Username, conn)
 
 	go client.readThread()
 	go client.writeThread()
@@ -104,28 +104,6 @@ func (server *Server) serverLoop() {
 				unregister.username,
 			)
 			// TODO: remove client from game rooms
-		case gameMove := <-server.moveReceiver:
-			// TODO: check if the game exists, check if the user is using the same term
-			gameState := server.games[gameMove.GameID]
-			isValidMove := gameState.isValidMove(gameMove)
-			if !isValidMove {
-				// TODO: send a message back to the client that this is an invalid move
-			}
-			gameState.playMove(gameMove)
-			movingPlayer := gameMove.Username
-			message, err := json.Marshal(gameMove)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			if gameState.blackPlayer.username == movingPlayer {
-				// send the move to the red player
-				server.clients[gameState.redPlayer.username].send <- message
-			}
-			if gameState.redPlayer.username == movingPlayer {
-				// send the move to the black player
-				server.clients[gameState.blackPlayer.username].send <- message
-			}
 		default:
 			if server.readyQueue.size < 2 {
 				break
@@ -148,6 +126,8 @@ func (server *Server) serverLoop() {
 				log.Println(err)
 				return
 			}
+			server.clients[gameRoom.blackPlayer.username].currentGame = &gameRoom
+			server.clients[gameRoom.redPlayer.username].currentGame = &gameRoom
 			// send the message that they have found a game to both players
 			server.clients[gameRoom.blackPlayer.username].send <- blackBytes
 			server.clients[gameRoom.redPlayer.username].send <- redBytes

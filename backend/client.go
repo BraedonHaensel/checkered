@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -17,14 +18,11 @@ type Client struct {
 	// current context
 	// either INGAME, QUEUING, SPECTATING or IDLE
 	status string
-	// the gameID of the current game that they are in game
-	// or are spectating
-	gameId string
+	// the the current game that they are playing
+	currentGame *GameRoom
 
 	// used to send messages to the client via websocket
 	send chan []byte
-	// used to send new moves to the client
-	moveSender chan<- GameMove
 }
 
 type ClientMessage struct {
@@ -37,7 +35,7 @@ func decodePayload(data []byte) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, is_game_move := raw["from"]
+	_, is_game_move := raw["source_index"]
 	// its a game move
 	if is_game_move {
 		var gameMove GameMove
@@ -53,6 +51,7 @@ func decodePayload(data []byte) (interface{}, error) {
 		var foundGame FoundGame
 		err := json.Unmarshal(data, &foundGame)
 		if err != nil {
+			log.Printf("%s", err)
 			return nil, err
 		}
 		return foundGame, err
@@ -108,18 +107,26 @@ func (c *Client) handleFoundGame(p FoundGame) {
 }
 
 func (c *Client) handleNewMove(p GameMove) {
-	panic("unimplemented")
+	gameMoveBytes, err := json.Marshal(p)
+	if err != nil {
+		log.Printf("Error at Marshalling\n")
+		return
+	}
+	if c.currentGame.redPlayer.username == c.username {
+		c.currentGame.blackPlayer.send <- gameMoveBytes
+	} else {
+		c.currentGame.redPlayer.send <- gameMoveBytes
+	}
 }
 
-func NewClient(username string, connection *websocket.Conn, moveSend chan<- GameMove) Client {
+func NewClient(username string, connection *websocket.Conn) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
-		username:   username,
-		conn:       connection,
-		status:     IDLE,
-		gameId:     "",
-		send:       make(chan []byte),
-		moveSender: moveSend,
+		username:    username,
+		conn:        connection,
+		status:      IDLE,
+		currentGame: nil,
+		send:        make(chan []byte),
 	}
 	return c
 }
