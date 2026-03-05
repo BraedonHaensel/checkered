@@ -1,4 +1,4 @@
-import type { PlayerColor } from '../enums'
+import type { PlayerColor, TileState } from '../enums'
 
 interface GenericMessage<T> {
     type: T
@@ -17,4 +17,13 @@ export interface MoveMessage extends GenericMessage<'move'> {
     destination_index: number
 }
 
-export type Message = JoinMessage | StartMessage | MoveMessage
+export interface UpdateStateMessage extends GenericMessage<"update_state"> {
+    tile_states: TileState[]
+    turn: PlayerColor
+    previous_move?: {
+        source_index: number,
+        destination_index: number,
+    }
+}
+
+export type Message = JoinMessage | StartMessage | MoveMessage | UpdateStateMessage
