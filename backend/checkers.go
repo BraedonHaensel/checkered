@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -13,13 +14,13 @@ type MoveDirection int
 const (
 	Empty = iota
 	RedStandardPiece
-	RedKingPiece 
-	BlackStandardPiece 
+	RedKingPiece
+	BlackStandardPiece
 	BlackKingPiece
 )
 
 const (
-	Black = iota 
+	Black = iota
 	Red
 )
 
@@ -31,12 +32,28 @@ const (
 )
 
 type Game struct {
-	gameID      	uuid.UUID
-	redPlayer   	*Client
-	blackPlayer 	*Client
-	tileStates  	[]TileState
-	turn  			PieceColor
-	previousMove 	*GameMove
+	gameID       uuid.UUID
+	redPlayer    *Client
+	blackPlayer  *Client
+	tileStates   []TileState
+	turn         PieceColor
+	previousMove *GameMove
+}
+
+func generateInitialTileStates() []TileState {
+	tileStates := make([]TileState, 32)
+
+	for i := range tileStates {
+		if i < 12 {
+			tileStates[i] = RedStandardPiece
+		} else if i < 20 {
+			tileStates[i] = Empty
+		} else {
+			tileStates[i] = BlackStandardPiece
+		}
+	}
+
+	return tileStates
 }
 
 func isBlackPiece(state TileState) bool {
@@ -88,20 +105,20 @@ func tileIndexToRow(index int) int {
 }
 
 func isOffsetRow(row int) bool {
-	return row % 2 == 0
+	return row%2 == 0
 }
 
 func tileIndexToCol(index int) int {
 	col := (index % 4) * 2
 	offset := 0
-	if tileIndexToRow(index) % 2 == 0 {
+	if tileIndexToRow(index)%2 == 0 {
 		offset = 1
 	}
 	return col + offset
 }
 
 func isUpwardMoveDirection(direction MoveDirection) bool {
-	switch(direction) {
+	switch direction {
 	case UpLeft:
 		return true
 	case UpRight:
@@ -112,7 +129,7 @@ func isUpwardMoveDirection(direction MoveDirection) bool {
 }
 
 func isLeftwardMoveDiretion(direction MoveDirection) bool {
-	switch(direction) {
+	switch direction {
 	case UpLeft:
 		return true
 	case DownLeft:
@@ -123,44 +140,44 @@ func isLeftwardMoveDiretion(direction MoveDirection) bool {
 }
 
 func isJumpMove(from int, to int) bool {
-	distance := to - from;
+	distance := to - from
 
-	return distance >= 7 || distance <= 7
+	return int(math.Abs(float64(distance))) >= 7
 }
 
 func getMoveAmountForDirection(direction MoveDirection, isOffsetRow bool, isJump bool) int {
-	if(isUpwardMoveDirection(direction)) {
-		if(isLeftwardMoveDiretion(direction)) {
+	if isUpwardMoveDirection(direction) {
+		if isLeftwardMoveDiretion(direction) {
 			// Up left move
-			if(isJump) {
+			if isJump {
 				return -9
-			} else if(isOffsetRow) {
-				return -3
+			} else if isOffsetRow {
+				return -4
 			} else {
 				return -5
 			}
 		}
 		// Up right move
-		if(isJump) {
+		if isJump {
 			return -7
-		} else if(isOffsetRow) {
+		} else if isOffsetRow {
 			return -3
 		} else {
 			return -4
 		}
 	}
-	if(isLeftwardMoveDiretion(direction)) {
-		if(isJump) {
+	if isLeftwardMoveDiretion(direction) {
+		if isJump {
 			return 7
-		} else if(isOffsetRow) {
+		} else if isOffsetRow {
 			return 4
 		} else {
 			return 3
 		}
 	}
-	if(isJump) {
+	if isJump {
 		return 9
-	} else if(isOffsetRow) {
+	} else if isOffsetRow {
 		return 5
 	} else {
 		return 4
@@ -168,14 +185,20 @@ func getMoveAmountForDirection(direction MoveDirection, isOffsetRow bool, isJump
 }
 
 func getMoveDirectionByDistance(distance int) MoveDirection {
-	if(distance == -9) {return UpLeft}
-	if(distance == -7) {return UpRight}
-	if(distance == 7) {return DownLeft}
+	if distance == -9 {
+		return UpLeft
+	}
+	if distance == -7 {
+		return UpRight
+	}
+	if distance == 7 {
+		return DownLeft
+	}
 	return DownRight
 }
 
 func getJumpedIndex(from int, to int) int {
-	if (!isJumpMove(from, to)) {
+	if !isJumpMove(from, to) {
 		panic("Invalid jump move")
 	}
 
@@ -188,36 +211,56 @@ func getJumpedIndex(from int, to int) int {
 func getMoveDestinationInDirection(index int, color PieceColor, tiles []TileState, direction MoveDirection) *int {
 	row := tileIndexToRow(index)
 	upwards := isUpwardMoveDirection(direction)
-	if(upwards && row == 0) {return nil}
-	if(!upwards && row == 7) {return nil}
+	if upwards && row == 0 {
+		return nil
+	}
+	if !upwards && row == 7 {
+		return nil
+	}
 
 	col := tileIndexToCol(index)
 	leftward := isLeftwardMoveDiretion(direction)
-	if(leftward && col == 0) {return nil}
-	if(!leftward && col == 7) {return nil}
+	if leftward && col == 0 {
+		return nil
+	}
+	if !leftward && col == 7 {
+		return nil
+	}
 
 	moveAmount := getMoveAmountForDirection(direction, isOffsetRow(row), false)
 	dest := index + moveAmount
 
-	if(tiles[dest] == Empty) {
+	if tiles[dest] == Empty {
 		return &dest
 	}
 
-	if(upwards && row <= 1) {return nil}
-	if(!upwards && row >= 6) {return nil}
+	if upwards && row <= 1 {
+		return nil
+	}
+	if !upwards && row >= 6 {
+		return nil
+	}
 
-	if(leftward && col <= 1) {return nil}
-	if(!leftward && col >= 6) {return nil}
+	if leftward && col <= 1 {
+		return nil
+	}
+	if !leftward && col >= 6 {
+		return nil
+	}
 
-	isBlack := color == Black 
+	isBlack := color == Black
 	isJumpingBlack := isBlackPiece(tiles[dest])
 
-	if(isBlack == isJumpingBlack) {return nil}
+	if isBlack == isJumpingBlack {
+		return nil
+	}
 
 	moveAmount = getMoveAmountForDirection(direction, isOffsetRow(row), true)
-	dest = index + moveAmount 
+	dest = index + moveAmount
 
-	if(tiles[dest] == Empty) {return &dest}
+	if tiles[dest] == Empty {
+		return &dest
+	}
 
 	return nil
 }
@@ -225,21 +268,27 @@ func getMoveDestinationInDirection(index int, color PieceColor, tiles []TileStat
 func getPieceMoveDestinations(index int, color PieceColor, tiles []TileState) []int {
 	state := tiles[index]
 
-	if(state == Empty) {return make([]int, 0)}
+	if state == Empty {
+		return make([]int, 0)
+	}
 
-	if(color == Black) {
-		if(!isBlackPiece(state)) {return make([]int, 0)}
+	if color == Black {
+		if !isBlackPiece(state) {
+			return make([]int, 0)
+		}
 	} else {
-		if(isBlackPiece(state)) {return make([]int, 0)}
+		if isBlackPiece(state) {
+			return make([]int, 0)
+		}
 	}
 
 	moveDirections := make([]MoveDirection, 0)
 
-	if(isBlackPiece(state) || isKingPiece(state)) {
+	if isBlackPiece(state) || isKingPiece(state) {
 		moveDirections = append(moveDirections, UpLeft)
 		moveDirections = append(moveDirections, UpRight)
 	}
-	if(!isBlackPiece(state) || isKingPiece(state)) {
+	if !isBlackPiece(state) || isKingPiece(state) {
 		moveDirections = append(moveDirections, DownLeft)
 		moveDirections = append(moveDirections, DownRight)
 	}
@@ -248,15 +297,17 @@ func getPieceMoveDestinations(index int, color PieceColor, tiles []TileState) []
 
 	for _, direction := range moveDirections {
 		dest := getMoveDestinationInDirection(index, color, tiles, direction)
-		if (dest != nil) {moveDestinations = append(moveDestinations, *dest)}
+		if dest != nil {
+			moveDestinations = append(moveDestinations, *dest)
+		}
 	}
 
 	return moveDestinations
 }
 
 func containsJumpMove(index int, moveDestinations []int) bool {
-	for _,dest  := range moveDestinations {
-		if(isJumpMove(index, dest)) {
+	for _, dest := range moveDestinations {
+		if isJumpMove(index, dest) {
 			return true
 		}
 	}
@@ -264,22 +315,22 @@ func containsJumpMove(index int, moveDestinations []int) bool {
 }
 
 func getMoveDestinations(tiles []TileState, color PieceColor, prevMoveDestIndex *int) [][]int {
-	if(prevMoveDestIndex != nil) {
+	if prevMoveDestIndex != nil {
 		prevMoveColor := Red
-		if(isBlackPiece(tiles[*prevMoveDestIndex])) {
+		if isBlackPiece(tiles[*prevMoveDestIndex]) {
 			prevMoveColor = Black
 		}
-		
-		if(PieceColor(prevMoveColor) == color) {
+
+		if PieceColor(prevMoveColor) == color {
 			tmpPieceDestinations := getPieceMoveDestinations(*prevMoveDestIndex, color, tiles)
 			pieceDestinations := make([]int, 0)
 
-			for _,dest  := range tmpPieceDestinations {
-				if(isJumpMove(*prevMoveDestIndex, dest)) {
+			for _, dest := range tmpPieceDestinations {
+				if isJumpMove(*prevMoveDestIndex, dest) {
 					pieceDestinations = append(pieceDestinations, dest)
 				}
 			}
-			
+
 			moveDestinations := make([][]int, len(tiles))
 			moveDestinations[*prevMoveDestIndex] = pieceDestinations
 
@@ -292,21 +343,23 @@ func getMoveDestinations(tiles []TileState, color PieceColor, prevMoveDestIndex 
 		moveDestinations = append(moveDestinations, getPieceMoveDestinations(index, color, tiles))
 	}
 
-	hasJump := false 
-	for index,moves  := range moveDestinations {
-		if(containsJumpMove(index, moves)) {
+	fmt.Printf("%v\n", moveDestinations)
+
+	hasJump := false
+	for index, moves := range moveDestinations {
+		if containsJumpMove(index, moves) {
 			hasJump = true
 			break
 		}
 	}
 
-	if(hasJump) {
+	if hasJump {
 		for i := range moveDestinations {
 			old := moveDestinations[i]
 			moveDestinations[i] = make([]int, 0)
 
-			for index, dest := range old {
-				if(isJumpMove(index, dest)) {
+			for _, dest := range old {
+				if isJumpMove(i, dest) {
 					moveDestinations[i] = append(moveDestinations[i], dest)
 				}
 			}
@@ -319,24 +372,30 @@ func getMoveDestinations(tiles []TileState, color PieceColor, prevMoveDestIndex 
 func hasLegalMoves(tiles []TileState, color PieceColor) bool {
 	playerMoveDestinations := getMoveDestinations(tiles, color, nil)
 
-	for _,dests  := range playerMoveDestinations {
-		if(len(dests) > 0) {return true}
+	for _, dests := range playerMoveDestinations {
+		if len(dests) > 0 {
+			return true
+		}
 	}
 
 	return false
 }
 
 func hasRemainingPieces(tiles []TileState, color PieceColor) bool {
-	for _,state  := range tiles {
-		if(color == Black && isBlackPiece(state)) {return true}
-		if(color == Red && isRedPiece(state)) {return true}
+	for _, state := range tiles {
+		if color == Black && isBlackPiece(state) {
+			return true
+		}
+		if color == Red && isRedPiece(state) {
+			return true
+		}
 	}
 	return false
 }
 
 func (game *Game) playMove(gameMove GameMove) bool {
-	if(!game.isValidMove(gameMove)) {
-		return false;
+	if !game.isValidMove(gameMove) {
+		return false
 	}
 	newTileStates := make([]TileState, len(game.tileStates))
 	copy(newTileStates, game.tileStates)
@@ -344,13 +403,13 @@ func (game *Game) playMove(gameMove GameMove) bool {
 	// Check state of the moved piece
 	newPieceState := newTileStates[gameMove.From]
 	isBlackMove := isBlackPiece(newPieceState)
-	
+
 	// Check for a promotion from a standard to crown piece
 	if isStandardPiece(newPieceState) {
 		destRow := tileIndexToRow(gameMove.To)
-		if(isBlackMove && destRow == 0) {
+		if isBlackMove && destRow == 0 {
 			newPieceState = BlackKingPiece
-		} else if(!isBlackMove && destRow == 7) {
+		} else if !isBlackMove && destRow == 7 {
 			newPieceState = RedKingPiece
 		}
 	}
@@ -358,20 +417,20 @@ func (game *Game) playMove(gameMove GameMove) bool {
 	newTileStates[gameMove.To] = newPieceState
 	newTileStates[gameMove.From] = Empty
 
-	currentPlayerColor := Red 
+	currentPlayerColor := Red
 	waitingPlayerColor := Black
-	if(isBlackMove) {
-		currentPlayerColor = Black 
-		waitingPlayerColor = Red 
+	if isBlackMove {
+		currentPlayerColor = Black
+		waitingPlayerColor = Red
 	}
-	
+
 	isJump := isJumpMove(gameMove.From, gameMove.To)
 
-	if(isJump) {
+	if isJump {
 		jumpedIndex := getJumpedIndex(gameMove.From, gameMove.To)
 		newTileStates[jumpedIndex] = Empty
 
-		if(!hasRemainingPieces(newTileStates, PieceColor(waitingPlayerColor))) {
+		if !hasRemainingPieces(newTileStates, PieceColor(waitingPlayerColor)) {
 			game.tileStates = newTileStates
 			game.previousMove = &gameMove
 
@@ -380,8 +439,8 @@ func (game *Game) playMove(gameMove GameMove) bool {
 		}
 
 		newMoveDestinations := getMoveDestinations(newTileStates, PieceColor(currentPlayerColor), &gameMove.To)
-		
-		if(containsJumpMove(gameMove.To, newMoveDestinations[gameMove.To])) {
+
+		if containsJumpMove(gameMove.To, newMoveDestinations[gameMove.To]) {
 			game.tileStates = newTileStates
 			game.previousMove = &gameMove
 
@@ -390,7 +449,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 		}
 	}
 
-	if(!hasLegalMoves(newTileStates, PieceColor(waitingPlayerColor))) {
+	if !hasLegalMoves(newTileStates, PieceColor(waitingPlayerColor)) {
 		game.tileStates = newTileStates
 		game.previousMove = &gameMove
 
@@ -406,18 +465,22 @@ func (game *Game) playMove(gameMove GameMove) bool {
 }
 
 func (game *Game) isValidMove(gameMove GameMove) bool {
-	color := Red 
-	if(isBlackPiece(game.tileStates[gameMove.From])) {
+	color := Red
+	if isBlackPiece(game.tileStates[gameMove.From]) {
 		color = Black
 	}
-	allValidMoves := getMoveDestinations(game.tileStates, PieceColor(color), &game.previousMove.To)
+	var prevMove *int = nil
+	if game.previousMove != nil {
+		prevMove = &game.previousMove.To
+	}
+	allValidMoves := getMoveDestinations(game.tileStates, PieceColor(color), prevMove)
 
 	validMoves := allValidMoves[gameMove.From]
 
-	// Check if the move that was made is in the list of valid moves starting 
+	// Check if the move that was made is in the list of valid moves starting
 	// from the From index
-	for _,dest  := range validMoves {
-		if(dest == gameMove.To) {
+	for _, dest := range validMoves {
+		if dest == gameMove.To {
 			return true
 		}
 	}

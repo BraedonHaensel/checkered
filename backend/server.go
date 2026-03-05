@@ -111,7 +111,14 @@ func (server *Server) serverLoop() {
 			redPlayer := Dequeue(&server.readyQueue)
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-			gameRoom := Game{redPlayer: redPlayer, blackPlayer: blackPlayer, gameID: uuid.New()}
+			gameRoom := Game{
+				gameID: uuid.New(),
+				redPlayer: redPlayer, 
+				blackPlayer: blackPlayer, 
+				tileStates: generateInitialTileStates(),
+				turn: Red,
+				previousMove: nil,
+			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
 			redMessage := gameRoom.messageFromNewGame("red")
