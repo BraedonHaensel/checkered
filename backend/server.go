@@ -21,8 +21,8 @@ const (
 )
 
 type Server struct {
-	// we map uuid to client
-	clients map[uuid.UUID]*Client
+	// we map username to client
+	clients map[string]*Client
 	// games that new clients are in
 	games       map[uuid.UUID]*GameRoom
 	readyQueue  Queue[*Client]
@@ -38,16 +38,20 @@ var addr = flag.String("addr", ":8080", "http service address")
 
 func InitServer() *Server {
 	server := Server{
-		clients:      make(map[uuid.UUID]*Client),
-		games:        make(map[uuid.UUID]*GameRoom),
-		register:     make(chan *Client),
-		unregister:   make(chan *Client),
-		newGame:      make(chan *GameRoom),
-		moveReceiver: make(chan GameMove),
-		leaderboard:  &Leaderboard{},
+		clients:     make(map[string]*Client),
+		games:       make(map[uuid.UUID]*GameRoom),
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		newGame:     make(chan *GameRoom),
+		leaderboard: &Leaderboard{},
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
+}
+
+type RegisterMessage struct {
+	Kind     string `json:"type"`
+	Username string `json:"user"`
 }
 
 func checkOrigin(r *http.Request) bool {
@@ -63,8 +67,15 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
+	// get a message from the client indicating who they are
+	var registerMessage RegisterMessage
+	err = conn.ReadJSON(&registerMessage)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	// create a new client for this request
-	client := NewClient(conn, server.moveReceiver)
+	client := NewClient(registerMessage.Username, conn, server.moveReceiver)
 
 	go client.readThread()
 	go client.writeThread()
@@ -83,18 +94,16 @@ func (server *Server) serverLoop() {
 	for {
 		select {
 		case new_client := <-server.register:
-			server.clients[new_client.Uuid] = new_client
+			server.clients[new_client.username] = new_client
 			log.Printf(
-				"New client \"%s\" registered with UUID: \"%s\"",
+				"New client \"%s\"",
 				new_client.username,
-				new_client.Uuid,
 			)
 		case unregister := <-server.unregister:
-			delete(server.clients, unregister.Uuid)
+			delete(server.clients, unregister.username)
 			log.Printf(
-				"Client \"%s\" with UUID: \"%s\" deregistered",
+				"Client \"%s\" deregistered",
 				unregister.username,
-				unregister.Uuid,
 			)
 			// TODO: remove client from game rooms
 		case newGame := <-server.newGame:
@@ -112,8 +121,8 @@ func (server *Server) serverLoop() {
 				return
 			}
 			// send the message that they have found a game to both players
-			server.clients[newGame.blackPlayer.Uuid].send <- blackBytes
-			server.clients[newGame.redPlayer.Uuid].send <- redBytes
+			server.clients[newGame.blackPlayer.username].send <- blackBytes
+			server.clients[newGame.redPlayer.username].send <- redBytes
 		case gameMove := <-server.moveReceiver:
 			// TODO: check if the game exists, check if the user is using the same term
 			gameState := server.games[gameMove.GameID]
@@ -122,25 +131,25 @@ func (server *Server) serverLoop() {
 				// TODO: send a message back to the client that this is an invalid move
 			}
 			gameState.playMove(gameMove)
-			playerUUID := gameMove.UserID
+			movingPlayer := gameMove.Username
 			message, err := json.Marshal(gameMove)
 			if err != nil {
 				log.Println(err)
 				return
 			}
-			if gameState.blackPlayer.Uuid == playerUUID {
+			if gameState.blackPlayer.username == movingPlayer {
 				// send the move to the red player
-				server.clients[gameState.redPlayer.Uuid].send <- message
+				server.clients[gameState.redPlayer.username].send <- message
 			}
-			if gameState.redPlayer.Uuid == playerUUID {
+			if gameState.redPlayer.username == movingPlayer {
 				// send the move to the black player
-				server.clients[gameState.blackPlayer.Uuid].send <- message
+				server.clients[gameState.blackPlayer.username].send <- message
 			}
 		default:
 			if server.readyQueue.size >= 2 {
 				redPlayer := Dequeue(&server.readyQueue)
 				blackPlayer := Dequeue(&server.readyQueue)
-				log.Printf("New game created (red: %s, black: %s)\n", redPlayer.Uuid, blackPlayer.Uuid)
+				log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
 				gameRoom := GameRoom{redPlayer: redPlayer, blackPlayer: blackPlayer}
 				server.newGame <- &gameRoom
 			}
@@ -156,7 +165,7 @@ func main() {
 	server.leaderboard.UpdateLeaderboard(GameResult{
 		gameID: "test",
 		winner: "akeuben",
-		loser: "test",
+		loser:  "test",
 	})
 	go server.serverLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {

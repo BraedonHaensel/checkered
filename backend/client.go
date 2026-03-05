@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 type Client struct {
-	// uuid for client
-	Uuid uuid.UUID
 	// chosen username for user
 	username string
 	// connection
@@ -113,11 +110,10 @@ func (c *Client) handleNewMove(p GameMove) {
 	panic("unimplemented")
 }
 
-func NewClient(connection *websocket.Conn, moveSend chan<- GameMove) Client {
+func NewClient(username string, connection *websocket.Conn, moveSend chan<- GameMove) Client {
 	c := Client{
-		Uuid: uuid.New(),
 		// TODO: figure out how to handle new usernames
-		username:   "",
+		username:   username,
 		conn:       connection,
 		status:     IDLE,
 		gameId:     "",
