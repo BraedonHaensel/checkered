@@ -79,7 +79,6 @@ const Tile = React.memo(
                     {isMoveDestination && (
                         <div className="h-1/3 w-1/3 rounded-full bg-gray-300 opacity-70"></div>
                     )}
-                    <i>{tileIndex}</i>
                 </div>
             </div>
         )

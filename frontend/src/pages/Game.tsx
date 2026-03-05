@@ -155,6 +155,13 @@ const Game = ({ user }: { user: string }) => {
         }))
     })
 
+    session.on("game_end", (message) => {
+        setGameStatus({
+            state: "FINISHED",
+            winner: message.winner,
+        })
+    })
+
     const handlePieceMove = (
         source_index: number,
         destination_index: number

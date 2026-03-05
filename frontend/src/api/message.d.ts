@@ -26,4 +26,8 @@ export interface UpdateStateMessage extends GenericMessage<"update_state"> {
     }
 }
 
-export type Message = JoinMessage | StartMessage | MoveMessage | UpdateStateMessage
+export interface GameEndMessage extends GenericMessage<"game_end"> {
+    winner: PlayerColor | "draw"
+}
+
+export type Message = JoinMessage | StartMessage | MoveMessage | UpdateStateMessage | GameEndMessage

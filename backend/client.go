@@ -107,10 +107,15 @@ func (c *Client) handleFoundGame(p FoundGame) {
 }
 
 type GameStateUpdate struct {
-	Kind			string 			`json:"type"`
-	TileStates		[]TileState 	`json:"tile_states"`
-	Turn 			string 			`json:"turn"`
-	PreviousMove	*GameMove 		`json:"previous_move,omitempty"`
+	Kind         string      `json:"type"`
+	TileStates   []TileState `json:"tile_states"`
+	Turn         string      `json:"turn"`
+	PreviousMove *GameMove   `json:"previous_move,omitempty"`
+}
+
+type GameEndMessage struct {
+	Kind   string `json:"type"`
+	Winner string `json:"winner"`
 }
 
 func (c *Client) handleNewMove(p GameMove) {
@@ -118,9 +123,9 @@ func (c *Client) handleNewMove(p GameMove) {
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
-		Kind: 	"update_state",
-		TileStates: c.currentGame.tileStates,
-		Turn: "red",
+		Kind:         "update_state",
+		TileStates:   c.currentGame.tileStates,
+		Turn:         "red",
 		PreviousMove: c.currentGame.previousMove,
 	}
 
@@ -133,7 +138,6 @@ func (c *Client) handleNewMove(p GameMove) {
 		log.Printf("Error at Marshalling\n")
 		return
 	}
-
 	if !validMove {
 		c.send <- gameStateBytes
 	} else {
