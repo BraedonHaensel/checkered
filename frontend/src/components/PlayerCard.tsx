@@ -21,7 +21,7 @@ export const PlayerCard = ({
         <div className="w-full p-5 lg:pr-0">
             <div className="box-border flex w-full gap-3 rounded-lg bg-neutral-900 p-3">
                 <div
-                    className={`flex aspect-square w-15 items-center justify-center rounded-xl bg-white ${turn ? 'border-5 border-yellow-500' : ''}`}
+                    className={`flex aspect-square w-15 items-center justify-center rounded-xl border-5 bg-white ${turn ? 'border-yellow-500' : ''}`}
                 >
                     <Piece
                         isBlack={color === PlayerColor.BLACK}
