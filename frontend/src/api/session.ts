@@ -3,8 +3,16 @@ import type { Message } from './message'
 import { Backend } from './backend'
 
 export class Session {
-    private handlers: Record<string, (msg: any) => void> = {}
+    private handlers: Record<string, (msg: any) => void> = {
+        'registered': () => {
+            this.wsConnected = true;
+            for (const message of this.queuedMessages)
+                this.send(message);
+        }
+    }
     private ws: WebSocket | null = null
+    private wsConnected: boolean = false
+    private queuedMessages: Message[] = []
 
     public constructor() {}
 
@@ -25,18 +33,24 @@ export class Session {
         this.handlers[type] = handler;
     }
 
-    public connect(ws: WebSocket) {
+    public connect(ws: WebSocket, user: string) {
         this.ws = ws
         this.ws.addEventListener('message', (event: MessageEvent<any>) => {
             this.onmessage(event)
         })
+        this.ws.send(JSON.stringify({
+            type: 'join',
+            user: user,
+        }))
     }
 
     public send(msg: Message): void {
-        if (!this.ws) {
+        if (!this.ws || !this.wsConnected) {
+            this.queuedMessages.push(msg)
             return
         }
-        this.ws.send(JSON.stringify(msg))
+        if (this.wsConnected)
+            this.ws.send(JSON.stringify(msg))
     }
 
     public end(): void {

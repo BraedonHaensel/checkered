@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import GameBoard from '../components/GameBoard'
 import { Page, PlayerColor, TileState } from '../enums'
 import {
@@ -19,19 +19,39 @@ import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { IngameDetails } from '../components/GameDetails'
 import { DashboardButton, DrawButton } from '../components/Buttons'
+const DEFAULT_GAME_STATE: GameState = {
+    tileStates: getNewBoardTileStates(),
+    playerColor: PlayerColor.BLACK,
+    isYourTurn: false,
+    previousMove: undefined,
+};
+const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' };
 
 const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }) => {
+    const session = useSession(user);
     const [gameState, setGameState] = useState<GameState>({
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
         previousMoves: [],
         opponent: "Opponent",
-    })
-    const [gameStatus, setGameStatus] = useState<GameStatus>({
-        state: 'SEARCHING',
-    })
-    const session = useSession(user)
+    });
+    const [gameStatus, setGameStatus] = useReducer<GameStatus, [GameStatus], [GameStatus]>((prev, ...arg) => {
+        if (arg.length != 1) {
+            console.error('Unexpected state update', arg)
+            return prev
+        }
+        const newState = arg[0]
+        if (prev.state != 'SEARCHING' && newState.state === 'SEARCHING') {
+            console.log('Searching...')
+            session.send({ type: 'enqueue' });
+        }
+        return newState
+    }, [DEFAULT_GAME_STATUS], (i) => {
+        console.log('Searching...')
+        session.send({ type: 'enqueue' });
+        return i[0];
+    });
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
@@ -132,6 +152,11 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                 }],
             }
         })
+    }
+
+    const resetState = () => {
+        updateGameState(DEFAULT_GAME_STATE);
+        setGameStatus(DEFAULT_GAME_STATUS);
     }
 
     session.on('start', (message) => {
