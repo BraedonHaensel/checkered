@@ -27,6 +27,8 @@ type Client struct {
 	// the registration channel
 	register func(*Client)
 	enqueued bool
+
+	unregister chan *Client
 }
 
 type ClientMessage struct {
@@ -86,9 +88,9 @@ func decodePayload(data []byte) (interface{}, error) {
 
 // message that is sent to the client when a game has been found
 type FoundGame struct {
-	Kind 		string `json:"type"`
-	Side 		string `json:"player_color"`
-	Opponent 	string `json:"opponent"`
+	Kind     string `json:"type"`
+	Side     string `json:"player_color"`
+	Opponent string `json:"opponent"`
 }
 
 func (c *Client) writeThread() {
@@ -155,10 +157,10 @@ func (c *Client) handleFoundGame(p FoundGame) {
 }
 
 type GameStateUpdate struct {
-	Kind         	string      `json:"type"`
-	TileStates   	[]TileState `json:"tile_states"`
-	Turn         	string      `json:"turn"`
-	PreviousMoves	[]GameMove   `json:"previous_moves"`
+	Kind          string      `json:"type"`
+	TileStates    []TileState `json:"tile_states"`
+	Turn          string      `json:"turn"`
+	PreviousMoves []GameMove  `json:"previous_moves"`
 }
 
 type GameEndMessage struct {
@@ -175,10 +177,10 @@ func (c *Client) handleNewMove(p GameMove) {
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
-		Kind:         	"update_state",
-		TileStates:   	c.currentGame.tileStates,
-		Turn:         	"red",
-		PreviousMoves: 	c.currentGame.previousMoves,
+		Kind:          "update_state",
+		TileStates:    c.currentGame.tileStates,
+		Turn:          "red",
+		PreviousMoves: c.currentGame.previousMoves,
 	}
 
 	if c.currentGame.turn == Black {
@@ -204,7 +206,7 @@ func otherPlayer(username string, game *Game) *Client {
 	return game.blackPlayer
 }
 
-func NewClient(username string, connection *websocket.Conn, register func(*Client)) Client {
+func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client)) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
 		username:    username,
@@ -214,6 +216,7 @@ func NewClient(username string, connection *websocket.Conn, register func(*Clien
 		send:        make(chan []byte),
 		register:    register,
 		enqueued:    false,
+		unregister:  unregister,
 	}
 	return c
 }

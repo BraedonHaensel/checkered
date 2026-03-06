@@ -79,7 +79,7 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn, func(client *Client) {
+	client := NewClient(registerMessage.Username, conn, server.unregister, func(client *Client) {
 		server.register <- client
 	})
 	server.clients[client.username] = &client
@@ -153,13 +153,13 @@ func (server *Server) serverLoop() {
 			blackPlayer.enqueued = false
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
 			gameRoom := Game{
-				gameID:       	uuid.New(),
-				redPlayer:    	redPlayer,
-				blackPlayer:  	blackPlayer,
-				tileStates:   	generateInitialTileStates(),
-				turn:         	Red,
-				previousMoves: 	make([]GameMove, 0),
-				resultChan:   server.gameResults,
+				gameID:        uuid.New(),
+				redPlayer:     redPlayer,
+				blackPlayer:   blackPlayer,
+				tileStates:    generateInitialTileStates(),
+				turn:          Red,
+				previousMoves: make([]GameMove, 0),
+				resultChan:    server.gameResults,
 			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game

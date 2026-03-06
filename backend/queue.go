@@ -63,18 +63,17 @@ func (queue *Queue[T]) dequeue() T {
 func (queue *Queue[T]) forEach(callback func(T, int)) {
 	for i := 0; i < queue.size; i++ {
 		callback(queue.arr[(queue.head+i)%queue.maxSize], i)
-  }
+	}
 }
-
 
 func RemoveValue(q *Queue[*Client], value *Client) {
 	originalSize := q.size
 
 	for i := 0; i < originalSize; i++ {
-		v := Dequeue(q)
+		v := q.dequeue()
 
 		if v.username != value.username {
-			Enqueue(q, v)
+			q.enqueue(v)
 		}
 	}
 }
