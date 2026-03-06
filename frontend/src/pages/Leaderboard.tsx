@@ -22,9 +22,9 @@ const Leaderboard = ({
 
     return (
         <div className="grid h-lvh grid-rows-[min-content_1fr] items-center justify-center pt-5">
-            <h1 className="w-full text-center">CHECKERED</h1>
-            <div className="grid w-[100vw] grid-cols-[1fr] grid-rows-[auto_min-content] items-center md:h-full md:grid-cols-[2fr_1fr] md:grid-rows-[1fr]">
-                <div className="flex h-full min-h-[67lvh] w-full flex-col items-center">
+            <h1 className="w-screen text-center">CHECKERED</h1>
+            <div className="grid w-full grid-cols-[1fr] grid-rows-[auto_min-content] items-center md:h-full md:grid-cols-[2fr_1fr] md:grid-rows-[1fr]">
+                <div className="flex h-full min-h-[67lvh] w-full flex-col items-center p-5">
                     <h2 className="text-3xl">Leaderboard</h2>
                     {leaderboard == null ? (
                         <>

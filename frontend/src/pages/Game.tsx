@@ -281,7 +281,10 @@ const Game = ({
                         color={opponentColor}
                         captured={lost}
                         lost={captured}
-                        turn={!gameState.isYourTurn}
+                        turn={
+                            gameStatus.state === 'IN_GAME' &&
+                            !gameState.isYourTurn
+                        }
                     />
                     <GameBoard
                         gameState={gameState}
@@ -292,7 +295,10 @@ const Game = ({
                         color={gameState.playerColor}
                         captured={captured}
                         lost={lost}
-                        turn={gameState.isYourTurn}
+                        turn={
+                            gameStatus.state === 'IN_GAME' &&
+                            !gameState.isYourTurn
+                        }
                     />
                 </div>
                 <IngameDetails
