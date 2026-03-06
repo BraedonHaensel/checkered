@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Tile from './Tile'
 import { PlayerColor } from '../enums'
-import { getMoveDestinations } from '../game-utils'
+import { getMoveDestinations, isBlackPiece } from '../game-utils'
 import type { GameState } from '../game-state'
 
 type Props = {
@@ -16,15 +16,34 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const { tileStates, playerColor, isYourTurn, previousMove } = gameState
 
     useEffect(() => {
+        if (previousMove !== undefined && isYourTurn) {
+            // Check the color of the previously moved piece
+            const isPreviousMoveBlack = isBlackPiece(tileStates[previousMove.destIndex])
+            if (
+                (isPreviousMoveBlack && playerColor === PlayerColor.BLACK) ||
+                (!isPreviousMoveBlack && playerColor === PlayerColor.RED)
+            ) {
+                // Player owns the previously moved piece and it's still their turn,
+                // so select the piece again for a multi-jump
+                // eslint-disable-next-line react-hooks/set-state-in-effect
+                setSelectedPieceIndex(previousMove.destIndex)
+                return
+            }
+        }
+
         // Clear selected piece after a board state change
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedPieceIndex(undefined)
-    }, [tileStates])
+    }, [isYourTurn, playerColor, previousMove, tileStates])
 
     // Array of arrays of valid move destinations for the piece on each tile
     const moveDestinations = useMemo(() => {
-        return getMoveDestinations(tileStates, playerColor, isYourTurn)
-    }, [tileStates, playerColor, isYourTurn])
+        return getMoveDestinations(
+            tileStates,
+            playerColor,
+            isYourTurn,
+            previousMove?.destIndex
+        )
+    }, [tileStates, playerColor, isYourTurn, previousMove])
 
     // Array of valid move destinations for the currently selected piece
     const selectedPieceMoveDestinations = useMemo(
