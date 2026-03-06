@@ -9,7 +9,7 @@ interface GenericRequest<T> {
 export interface GetLeaderboardRequest extends GenericRequest<'leaderboard'> {}
 
 export interface GetLeaderboardResponse extends GenericRequest<'leaderboard'> {
-    board: { username: string; wins: number, losses: number }[]
+    board: { username: string; wins: number; losses: number }[]
 }
 
 export type Request = GetLeaderboardRequest

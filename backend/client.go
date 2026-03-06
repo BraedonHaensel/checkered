@@ -68,6 +68,8 @@ func decodePayload(data []byte) (interface{}, error) {
 		return parseMessage[GameMove](data)
 	case "enqueue":
 		return parseMessage[EnqueueRequest](data)
+	case "forfeit":
+		return parseMessage[Forfeit](data)
 	}
 
 	// _, is_found_game := raw["game_id"]
@@ -91,6 +93,10 @@ type FoundGame struct {
 	Kind     string `json:"type"`
 	Side     string `json:"player_color"`
 	Opponent string `json:"opponent"`
+}
+
+type Forfeit struct {
+	Kind 	string `json:"type"`
 }
 
 func (c *Client) writeThread() {
@@ -132,6 +138,11 @@ func (c *Client) readThread() {
 		case FoundGame: // TODO: remove as is not an actual message the client can send
 			// log.Printf("Received message (%s)\n", p.Kind)
 			c.handleFoundGame(p)
+		case Forfeit:
+			if c.currentGame != nil {
+				c.currentGame.turn = getOpponentColor(*c.currentGame, *c)
+				c.currentGame.handleGameEnd()
+			}
 		}
 	}
 }

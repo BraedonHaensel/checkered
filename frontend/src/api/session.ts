@@ -4,11 +4,10 @@ import { Backend } from './backend'
 
 export class Session {
     private handlers: Record<string, (msg: any) => void> = {
-        'registered': () => {
-            this.wsConnected = true;
-            for (const message of this.queuedMessages)
-                this.send(message);
-        }
+        registered: () => {
+            this.wsConnected = true
+            for (const message of this.queuedMessages) this.send(message)
+        },
     }
     private ws: WebSocket | null = null
     private wsConnected: boolean = false
@@ -21,16 +20,16 @@ export class Session {
 
         const type = data.type
 
-        const handler = this.handlers[type] || ((_: any) => {});
+        const handler = this.handlers[type] || ((_: any) => {})
 
-        handler(data);
+        handler(data)
     }
 
     public on<MessageType extends Message['type']>(
         type: MessageType,
         handler: (msg: Extract<Message, { type: MessageType }>) => void
     ): void {
-        this.handlers[type] = handler;
+        this.handlers[type] = handler
     }
 
     public connect(ws: WebSocket, user: string) {
@@ -38,10 +37,12 @@ export class Session {
         this.ws.addEventListener('message', (event: MessageEvent<any>) => {
             this.onmessage(event)
         })
-        this.ws.send(JSON.stringify({
-            type: 'join',
-            user: user,
-        }))
+        this.ws.send(
+            JSON.stringify({
+                type: 'join',
+                user: user,
+            })
+        )
     }
 
     public send(msg: Message): void {
@@ -49,8 +50,7 @@ export class Session {
             this.queuedMessages.push(msg)
             return
         }
-        if (this.wsConnected)
-            this.ws.send(JSON.stringify(msg))
+        if (this.wsConnected) this.ws.send(JSON.stringify(msg))
     }
 
     public end(): void {

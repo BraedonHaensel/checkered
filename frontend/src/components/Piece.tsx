@@ -1,4 +1,4 @@
-import style from "./Piece.module.css"
+import style from './Piece.module.css'
 import React from 'react'
 
 type Props = {
@@ -21,7 +21,7 @@ const Piece = React.memo(
                 className={
                     `flex h-3/4 w-3/4 items-center justify-center rounded-full ` +
                     `${isBlack ? 'bg-black' : 'bg-red-500'} ` +
-                    `${style.piece} ${isBlack ? style.black : style.red} ${isKing ? style.king : ""} ${showSelectedHighlight ? style.selected : showSelectableHighlight ? style.movable : ""}`
+                    `${style.piece} ${isBlack ? style.black : style.red} ${isKing ? style.king : ''} ${showSelectedHighlight ? style.selected : showSelectableHighlight ? style.movable : ''}`
                 }
             />
         )
