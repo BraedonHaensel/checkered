@@ -4,7 +4,7 @@ type Props = {
     onClick: () => void
 }
 
-type ButtonType = 'normal' | 'important' | 'danger'
+type ButtonType = 'normal' | 'important' | 'danger' | 'accept'
 
 // Search for opponent button
 export const SearchButton = ({ onClick }: Props) => {
@@ -38,9 +38,9 @@ export const DashboardButton = ({
     )
 }
 
-export const DrawButton = ({ onClick }: Props) => {
+export const DrawButton = ({ onClick, requested}: Props & {requested: boolean}) => {
     return (
-        <CustomButton onClick={onClick} type="normal" hint="Request Draw">
+        <CustomButton onClick={onClick} type={requested ? 'accept' : 'normal'} hint="Request Draw">
             <Handshake />
         </CustomButton>
     )
@@ -50,6 +50,7 @@ const colors: Record<ButtonType, string> = {
     danger: 'bg-red-500',
     normal: 'bg-neutral-400',
     important: 'bg-purple-400',
+    accept: 'bg-green-500',
 }
 
 const CustomButton = ({
@@ -59,7 +60,7 @@ const CustomButton = ({
     hint,
 }: {
     children: any
-    type: 'normal' | 'important' | 'danger'
+    type: ButtonType
     onClick: () => void
     hint: string
 }) => {

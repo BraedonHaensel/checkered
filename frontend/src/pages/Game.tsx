@@ -30,6 +30,7 @@ const DEFAULT_GAME_STATE: GameState = {
     isYourTurn: false,
     previousMoves: [],
     opponent: 'Opponent',
+    draw_requested: false
 }
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
@@ -115,6 +116,7 @@ const Game = ({
                         ...prev,
                         tileStates: newTileStates,
                         isYourTurn: false,
+                        draw_requested: false,
                         previousMoves: [
                             ...prev.previousMoves,
                             {
@@ -141,6 +143,7 @@ const Game = ({
                     return {
                         ...prev,
                         tileStates: newTileStates,
+                        draw_requested: false,
                         previousMoves: [
                             ...prev.previousMoves,
                             {
@@ -158,6 +161,7 @@ const Game = ({
                     ...prev,
                     tileStates: newTileStates,
                     isYourTurn: false,
+                    draw_requested: false,
                     previousMoves: [
                         ...prev.previousMoves,
                         {
@@ -173,6 +177,7 @@ const Game = ({
                 ...prev,
                 tileStates: newTileStates,
                 isYourTurn: gameState.playerColor === waitingPlayerColor,
+                draw_requested: false,
                 previousMoves: [
                     ...prev.previousMoves,
                     {
@@ -203,12 +208,20 @@ const Game = ({
         console.log(`Update State`, message)
         setGameState((oldState: GameState) => ({
             ...oldState,
+            draw_requested: false,
             tileStates: message.tile_states,
             previousMoves: message.previous_moves.map((move) => ({
                 sourceIndex: move.source_index,
                 destIndex: move.destination_index,
             })),
             isYourTurn: message.turn == oldState.playerColor,
+        }))
+    })
+
+    session.on("request_draw", () => {
+        setGameState(oldState => ({
+            ...oldState,
+            draw_requested: true,
         }))
     })
 
@@ -220,6 +233,7 @@ const Game = ({
         })
         setGameState((oldState) => ({
             ...oldState,
+            draw_requested: false,
             isYourTurn: false,
         }))
     })
@@ -254,9 +268,11 @@ const Game = ({
             break
         case 'FINISHED':
             statusMessage =
-                gameState.playerColor === gameStatus.winner
-                    ? 'Your win!'
-                    : 'You lose!'
+                gameStatus.winner === "draw" 
+                    ? "Draw!"
+                    : gameState.playerColor === gameStatus.winner
+                        ? 'Your win!'
+                        : 'You lose!'
             break
     }
 
@@ -264,6 +280,11 @@ const Game = ({
         session.send({
             type: 'forfeit',
         })
+    }
+
+    const draw = () => {
+        session.send({type: "request_draw"})
+        setGameState(old => ({...old, draw_requested: true}))
     }
 
     const opponentColor = gameState.playerColor === 'red' ? 'black' : 'red'
@@ -319,7 +340,7 @@ const Game = ({
                         exitsGame={gameStatus.state === 'IN_GAME'}
                     />
                     {gameStatus.state === 'IN_GAME' && (
-                        <DrawButton onClick={() => alert('TODO')} />
+                        <DrawButton onClick={() => draw()} requested={gameState.draw_requested} />
                     )}
                     {gameStatus.state === 'FINISHED' && (
                         <SearchButton onClick={resetState} />
