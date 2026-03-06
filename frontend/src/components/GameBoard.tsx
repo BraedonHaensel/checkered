@@ -150,10 +150,14 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     ])
 
     return (
-        <div
-            className={`grid h-150 w-150 ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 border-5 border-black`}
-        >
-            {tiles}
+        <div className="w-full h-full flex items-center justify-center overflow-hidden">
+            <div className="h-full max-w-full aspect-square flex items-center justify-center">
+                <div className="w-full aspect-square overflow-hidden flex items-center justify-center">
+                    <div className={`w-full h-full grid ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8`}>
+                        {tiles}
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }

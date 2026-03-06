@@ -1,0 +1,28 @@
+import { PlayerColor } from "../enums";
+import Piece from "./Piece";
+
+import style from "./Piece.module.css"
+
+export const PlayerCard = ({player, color, captured, lost}: {player: string, color: PlayerColor, captured: number, lost: number}) => {
+    const advantage = captured-lost;
+    return <div className="p-5 w-full">
+        <div className="flex w-full box-border p-3 gap-3 bg-neutral-900 rounded-lg">
+            <div className="w-15 aspect-square bg-white flex items-center justify-center rounded-xl">
+                <Piece isBlack={color === PlayerColor.BLACK} isKing={false} showSelectedHighlight={false} showSelectableHighlight={false} />
+            </div>
+            <div className="grid grid-rows-2 items-center">
+                <b>{player}</b>
+                <div className="flex flex-row items-center">
+                    <div className="px-1 flex flex-row items-center gap-3">
+                        {
+                            new Array(captured).fill(0).map(() => (
+                                <div className={`rounded-[100vw] w-4 aspect-square ${style.piece} ${color === PlayerColor.BLACK ? style.red + " bg-red-500" : style.white + " bg-white"}`} />
+                            ))
+                        } 
+                    </div>
+                    <i>{advantage > 0 ? `(+${advantage})` : advantage < 0 ? `(${advantage})` : ""}</i>
+                </div>
+            </div>
+        </div>
+    </div>
+}
