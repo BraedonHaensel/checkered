@@ -156,10 +156,15 @@ const Game = ({ user }: { user: string }) => {
     })
 
     session.on("game_end", (message) => {
+        console.log("Game Over!", message);
         setGameStatus({
             state: "FINISHED",
             winner: message.winner,
         })
+        setGameState((oldState) => ({
+            ...oldState,
+            isYourTurn: false,
+        }))
     })
 
     const handlePieceMove = (
