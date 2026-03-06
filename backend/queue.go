@@ -60,3 +60,15 @@ func Dequeue[T any](queue *Queue[T]) T {
 	queue.size--
 	return res
 }
+
+func RemoveValue(q *Queue[*Client], value *Client) {
+	originalSize := q.size
+
+	for i := 0; i < originalSize; i++ {
+		v := Dequeue(q)
+
+		if v.username != value.username {
+			Enqueue(q, v)
+		}
+	}
+}

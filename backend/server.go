@@ -75,7 +75,7 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn)
+	client := NewClient(registerMessage.Username, conn, server)
 
 	go client.readThread()
 	go client.writeThread()
@@ -101,6 +101,7 @@ func (server *Server) serverLoop() {
 			Enqueue(&server.readyQueue, new_client)
 		case unregister := <-server.unregister:
 			delete(server.clients, unregister.username)
+			RemoveValue(&server.readyQueue, unregister)
 			log.Printf(
 				"Client \"%s\" deregistered",
 				unregister.username,

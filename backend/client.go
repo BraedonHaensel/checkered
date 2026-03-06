@@ -23,6 +23,8 @@ type Client struct {
 
 	// used to send messages to the client via websocket
 	send chan []byte
+
+	unregister chan *Client
 }
 
 type ClientMessage struct {
@@ -68,6 +70,7 @@ type FoundGame struct {
 
 func (c *Client) writeThread() {
 	defer c.conn.Close()
+	defer c.handleDisconnect()
 	for message := range c.send {
 		c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 		w, err := c.conn.NextWriter(websocket.TextMessage)
@@ -82,6 +85,7 @@ func (c *Client) writeThread() {
 func (c *Client) readThread() {
 	// TODO: add logic for when a user sends a message back to the client
 	defer c.conn.Close()
+	defer c.handleDisconnect()
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -100,6 +104,22 @@ func (c *Client) readThread() {
 			c.handleFoundGame(p)
 		}
 	}
+}
+
+func getOpponentColor(game Game, client Client) PieceColor {
+	if game.blackPlayer.username == client.username {
+		return Red
+	}
+	return Black
+}
+
+func (c *Client) handleDisconnect() {
+	log.Printf("User %s disconnected", c.username)
+	if c.currentGame != nil {
+		c.currentGame.turn = getOpponentColor(*c.currentGame, *c)
+		c.currentGame.handleGameEnd()
+	}
+	c.unregister <- c
 }
 
 func (c *Client) handleFoundGame(p FoundGame) {
@@ -152,7 +172,7 @@ func otherPlayer(username string, game *Game) *Client {
 	return game.blackPlayer
 }
 
-func NewClient(username string, connection *websocket.Conn) Client {
+func NewClient(username string, connection *websocket.Conn, server *Server) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
 		username:    username,
@@ -160,6 +180,7 @@ func NewClient(username string, connection *websocket.Conn) Client {
 		status:      IDLE,
 		currentGame: nil,
 		send:        make(chan []byte),
+		unregister:  server.unregister,
 	}
 	return c
 }
