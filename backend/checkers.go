@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -32,13 +33,14 @@ const (
 )
 
 type Game struct {
-	gameID       	uuid.UUID
-	redPlayer    	*Client
-	blackPlayer  	*Client
-	tileStates   	[]TileState
-	turn         	PieceColor
-	previousMoves	[]GameMove
-	resultChan   	chan GameResult
+	gameID        uuid.UUID
+	redPlayer     *Client
+	blackPlayer   *Client
+	tileStates    []TileState
+	turn          PieceColor
+	previousMoves []GameMove
+	resultChan    chan GameResult
+	mu            sync.Mutex
 }
 
 func generateInitialTileStates() []TileState {
@@ -529,8 +531,8 @@ func (game *Game) handleGameEnd() {
 
 func (game *Game) messageFromNewGame(playerKind string, opponent string) FoundGame {
 	return FoundGame{
-		Kind: "start",
-		Side: playerKind,
+		Kind:     "start",
+		Side:     playerKind,
 		Opponent: opponent,
 	}
 }
