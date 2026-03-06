@@ -35,6 +35,9 @@ export interface GameEndMessage extends GenericMessage<"game_end"> {
     winner: PlayerColor | "draw"
 }
 
+export interface ForfeitMessage extends GenericMessage<"forfeit"> {
+}
+
 export type Message =
     JoinMessage
     | ConfirmRegistrationMessage
@@ -43,3 +46,5 @@ export type Message =
     | UpdateStateMessage
     | GameEndMessage
     | EnqueueMessage
+    | ForfeitMessage
+
