@@ -10,7 +10,7 @@ export const LeaderboardTable = ({leaderboard}: {leaderboard: GetLeaderboardResp
             </tr>  
         </thead>
         <tbody>
-            {leaderboard.board.map((row, i) => <tr key={i}>
+            {(leaderboard.board || []).map((row, i) => <tr key={i}>
                 <td>{row.username}</td>
                 <td>{row.wins}</td>
                 <td>{row.losses}</td>
