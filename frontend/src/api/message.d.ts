@@ -12,6 +12,7 @@ export interface ConfirmRegistrationMessage extends GenericMessage<'registered'>
 
 export interface StartMessage extends GenericMessage<'start'> {
     player_color: PlayerColor
+    opponent: string
 }
 
 export interface EnqueueMessage extends GenericMessage<'enqueue'> {}
@@ -24,10 +25,10 @@ export interface MoveMessage extends GenericMessage<'move'> {
 export interface UpdateStateMessage extends GenericMessage<"update_state"> {
     tile_states: TileState[]
     turn: PlayerColor
-    previous_move?: {
+    previous_moves: {
         source_index: number,
         destination_index: number,
-    }
+    }[]
 }
 
 export interface GameEndMessage extends GenericMessage<"game_end"> {

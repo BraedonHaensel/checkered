@@ -1,4 +1,4 @@
-import { Crown } from 'lucide-react'
+import style from "./Piece.module.css"
 import React from 'react'
 
 type Props = {
@@ -21,11 +21,9 @@ const Piece = React.memo(
                 className={
                     `flex h-3/4 w-3/4 items-center justify-center rounded-full ` +
                     `${isBlack ? 'bg-black' : 'bg-red-500'} ` +
-                    `${showSelectedHighlight ? 'border-4 border-gray-300' : showSelectableHighlight && 'border-3 border-yellow-500'}`
+                    `${style.piece} ${isBlack ? style.black : style.red} ${isKing ? style.king : ""} ${showSelectedHighlight ? style.selected : showSelectableHighlight ? style.movable : ""}`
                 }
-            >
-                {isKing && <Crown size={32} color="gold" />}
-            </div>
+            />
         )
     }
 )

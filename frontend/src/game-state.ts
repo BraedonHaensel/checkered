@@ -14,5 +14,6 @@ export interface GameState {
     tileStates: TileState[]
     playerColor: PlayerColor
     isYourTurn: boolean
-    previousMove: PreviousMove | undefined
+    previousMoves: PreviousMove[]
+    opponent: string
 }

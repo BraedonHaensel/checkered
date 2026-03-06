@@ -13,7 +13,8 @@ type Props = {
 const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
 
-    const { tileStates, playerColor, isYourTurn, previousMove } = gameState
+    const { tileStates, playerColor, isYourTurn, previousMoves } = gameState
+    const previousMove = previousMoves[previousMoves.length - 1]
 
     useEffect(() => {
         if (previousMove !== undefined && isYourTurn) {
@@ -150,10 +151,14 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     ])
 
     return (
-        <div
-            className={`grid h-150 w-150 ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 border-5 border-black`}
-        >
-            {tiles}
+        <div className="w-full h-full flex items-center justify-center pl-5 pr-5 md:pr-0">
+            <div className="h-full max-w-full aspect-square flex items-center justify-center">
+                <div className="w-full aspect-square flex items-center justify-center">
+                    <div className={`w-full h-full grid ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 rounded-xl overflow-hidden`}>
+                        {tiles}
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }

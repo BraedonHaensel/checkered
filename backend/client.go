@@ -86,12 +86,14 @@ func decodePayload(data []byte) (interface{}, error) {
 
 // message that is sent to the client when a game has been found
 type FoundGame struct {
-	Kind string `json:"type"`
-	Side string `json:"player_color"`
+	Kind 		string `json:"type"`
+	Side 		string `json:"player_color"`
+	Opponent 	string `json:"opponent"`
 }
 
 func (c *Client) writeThread() {
 	defer c.conn.Close()
+	defer c.handleDisconnect()
 	for message := range c.send {
 		c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 		w, err := c.conn.NextWriter(websocket.TextMessage)
@@ -106,6 +108,7 @@ func (c *Client) writeThread() {
 func (c *Client) readThread() {
 	// TODO: add logic for when a user sends a message back to the client
 	defer c.conn.Close()
+	defer c.handleDisconnect()
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -131,15 +134,31 @@ func (c *Client) readThread() {
 	}
 }
 
+func getOpponentColor(game Game, client Client) PieceColor {
+	if game.blackPlayer.username == client.username {
+		return Red
+	}
+	return Black
+}
+
+func (c *Client) handleDisconnect() {
+	log.Printf("User %s disconnected", c.username)
+	if c.currentGame != nil {
+		c.currentGame.turn = getOpponentColor(*c.currentGame, *c)
+		c.currentGame.handleGameEnd()
+	}
+	c.unregister <- c
+}
+
 func (c *Client) handleFoundGame(p FoundGame) {
 	panic("unimplemented")
 }
 
 type GameStateUpdate struct {
-	Kind         string      `json:"type"`
-	TileStates   []TileState `json:"tile_states"`
-	Turn         string      `json:"turn"`
-	PreviousMove *GameMove   `json:"previous_move,omitempty"`
+	Kind         	string      `json:"type"`
+	TileStates   	[]TileState `json:"tile_states"`
+	Turn         	string      `json:"turn"`
+	PreviousMoves	[]GameMove   `json:"previous_moves"`
 }
 
 type GameEndMessage struct {
@@ -156,10 +175,10 @@ func (c *Client) handleNewMove(p GameMove) {
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
-		Kind:         "update_state",
-		TileStates:   c.currentGame.tileStates,
-		Turn:         "red",
-		PreviousMove: c.currentGame.previousMove,
+		Kind:         	"update_state",
+		TileStates:   	c.currentGame.tileStates,
+		Turn:         	"red",
+		PreviousMoves: 	c.currentGame.previousMoves,
 	}
 
 	if c.currentGame.turn == Black {
