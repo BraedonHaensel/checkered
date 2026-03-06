@@ -443,7 +443,6 @@ func (game *Game) playMove(gameMove GameMove) bool {
 			game.tileStates = newTileStates
 			game.previousMove = &gameMove
 
-			game.handleGameEnd()
 			return true
 		}
 	}

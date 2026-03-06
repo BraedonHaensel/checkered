@@ -2,8 +2,10 @@ import { useEffect, useState } from "react"
 import type { GetLeaderboardResponse } from "../api/request"
 import { getLeaderboard } from "../api/api";
 import { LeaderboardTable } from "../components/Leaderboard";
+import { ReturnToDashboardButton } from "../components/ReturnToDashboardButton";
+import type { Page } from "../enums";
 
-const Leaderboard = () => {
+const Leaderboard = ({setPage}: {setPage: (page: Page) => void}) => {
     const [leaderboard, setLeaderboard] = useState<GetLeaderboardResponse | null>(null);
 
     useEffect(() => {
@@ -18,6 +20,7 @@ const Leaderboard = () => {
         </> : <>
             <LeaderboardTable leaderboard={leaderboard}/>
         </>}
+        <ReturnToDashboardButton setPage={setPage} />
     </>
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import GameBoard from '../components/GameBoard'
-import { PlayerColor, TileState } from '../enums'
+import { Page, PlayerColor, TileState } from '../enums'
 import {
     getNewBoardTileStates,
     isJumpMove,
@@ -15,8 +15,9 @@ import {
 } from '../game-utils'
 import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
+import { ReturnToDashboardButton } from '../components/ReturnToDashboardButton'
 
-const Game = ({ user }: { user: string }) => {
+const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }) => {
     const [gameState, setGameState] = useState<GameState>({
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
@@ -196,13 +197,14 @@ const Game = ({ user }: { user: string }) => {
                     {gameState.isYourTurn ? 'Your turn!' : "Opponent's turn..."}
                 </p>
             )}
-            {gameStatus.state === 'FINISHED' && (
+            {gameStatus.state === 'FINISHED' && <>
                 <p className="text-2xl">
                     {gameState.playerColor === gameStatus.winner
                         ? 'Your win!'
                         : 'You lose!'}
                 </p>
-            )}
+                <ReturnToDashboardButton setPage={setPage} />
+            </>}
         </div>
     )
 }
