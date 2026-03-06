@@ -22,24 +22,23 @@ export interface MoveMessage extends GenericMessage<'move'> {
     destination_index: number
 }
 
-export interface UpdateStateMessage extends GenericMessage<"update_state"> {
+export interface UpdateStateMessage extends GenericMessage<'update_state'> {
     tile_states: TileState[]
     turn: PlayerColor
     previous_moves: {
-        source_index: number,
-        destination_index: number,
+        source_index: number
+        destination_index: number
     }[]
 }
 
-export interface GameEndMessage extends GenericMessage<"game_end"> {
-    winner: PlayerColor | "draw"
+export interface GameEndMessage extends GenericMessage<'game_end'> {
+    winner: PlayerColor | 'draw'
 }
 
-export interface ForfeitMessage extends GenericMessage<"forfeit"> {
-}
+export interface ForfeitMessage extends GenericMessage<'forfeit'> {}
 
 export type Message =
-    JoinMessage
+    | JoinMessage
     | ConfirmRegistrationMessage
     | StartMessage
     | MoveMessage
@@ -47,4 +46,3 @@ export type Message =
     | GameEndMessage
     | EnqueueMessage
     | ForfeitMessage
-

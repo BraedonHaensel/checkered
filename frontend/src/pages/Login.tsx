@@ -12,17 +12,24 @@ const Login = ({
     return (
         <div className="loginPageRoot">
             <div className="loginContainer">
-                <div className='loginTop'>
+                <div className="loginTop">
                     <h1 className="appTitle">CHECKERED</h1>
                     <p className="appSubtitle">
-                      Online checkers game. Challenge friends and climb the ladder.
+                        Online checkers game. Challenge friends and climb the
+                        ladder.
                     </p>
                 </div>
-                <div className='loginBottom'>
-                    <div className='loginCard'>
+                <div className="loginBottom">
+                    <div className="loginCard">
                         <h2 className="loginTitle">USER LOGIN</h2>
-                        <input type="text" placeholder="Username" ref={usernameRef} className="loginInput"/>
-                        <button className="loginButton"
+                        <input
+                            type="text"
+                            placeholder="Username"
+                            ref={usernameRef}
+                            className="loginInput"
+                        />
+                        <button
+                            className="loginButton"
                             onClick={() => {
                                 if (usernameRef.current?.value) {
                                     setUser(usernameRef.current.value || '')

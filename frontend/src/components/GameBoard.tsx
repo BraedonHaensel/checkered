@@ -19,7 +19,9 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     useEffect(() => {
         if (previousMove !== undefined && isYourTurn) {
             // Check the color of the previously moved piece
-            const isPreviousMoveBlack = isBlackPiece(tileStates[previousMove.destIndex])
+            const isPreviousMoveBlack = isBlackPiece(
+                tileStates[previousMove.destIndex]
+            )
             if (
                 (isPreviousMoveBlack && playerColor === PlayerColor.BLACK) ||
                 (!isPreviousMoveBlack && playerColor === PlayerColor.RED)
@@ -151,10 +153,12 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     ])
 
     return (
-        <div className="w-full h-full flex items-center justify-center pl-5 pr-5 md:pr-0">
-            <div className="h-full max-w-full aspect-square flex items-center justify-center">
-                <div className="w-full aspect-square flex items-center justify-center">
-                    <div className={`w-full h-full grid ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 rounded-xl overflow-hidden`}>
+        <div className="flex h-full w-full items-center justify-center pr-5 pl-5 md:pr-0">
+            <div className="flex aspect-square h-full max-w-full items-center justify-center">
+                <div className="flex aspect-square w-full items-center justify-center">
+                    <div
+                        className={`grid h-full w-full ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 overflow-hidden rounded-xl`}
+                    >
                         {tiles}
                     </div>
                 </div>
