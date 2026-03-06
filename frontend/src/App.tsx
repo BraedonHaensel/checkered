@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 import Home from './pages/Home'
 import { Page } from './enums'
@@ -23,6 +23,20 @@ const pages: Record<
 function App() {
     const [user, setUser] = useState<string>('')
     const [page, setPage] = useState<Page>(Page.LOGIN)
+
+    // Adding body style speficially for the login page - just for the background
+    useEffect(() => {
+        if (page === Page.LOGIN) {
+            document.body.classList.add('login-page')
+        } else {
+            document.body.classList.remove('login-page')
+        }
+
+        // Cleanup
+        return () => {
+            document.body.classList.remove('login-page')
+        }
+    }, [page])
 
     const PageComponent = pages[page]
     return (
