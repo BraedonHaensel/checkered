@@ -7,27 +7,44 @@ import (
 )
 
 type Leaderboard struct {
-	board []LeaderboardEntry
+	Board []LeaderboardEntry `json:"board"`
 }
 
 type LeaderboardEntry struct {
-	username string
-	wins     int
-	losses   int
+	Username string `json:"username"`
+	Wins     int    `json:"wins"`
+	Losses   int    `json:"losses"`
 }
 
 func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
+	for i := range lb.Board {
+		if lb.Board[i].Username == username {
+			return
+		}
+	}
+
+	lb.Board = append(lb.Board, LeaderboardEntry{
+		Username: username,
+		Wins:     0,
+		Losses:   0,
+	})
 }
 
 func (lb *Leaderboard) UpdateLeaderboard(result GameResult) {
+	lb.AddPlayerToLeaderboard(result.winner)
+	lb.AddPlayerToLeaderboard(result.loser)
+	for i := range lb.Board {
+		if lb.Board[i].Username == result.winner {
+			lb.Board[i].Wins++
+		}
+		if lb.Board[i].Username == result.loser {
+			lb.Board[i].Losses++
+		}
+	}
 }
 
 // / return a json payload of the current leaderboard
 func (s *Server) getLeaderboard(w http.ResponseWriter, _ *http.Request) {
-	headers := w.Header()
-	headers.Set("Content-Type", "application/json")
-	headers.Set("Access-Control-Allow-Origin", "*")
-	headers.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD")
 	err := json.NewEncoder(w).Encode(s.leaderboard)
 	if err != nil {
 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)

@@ -7,11 +7,10 @@ import { getNewBoardTileStates } from '../game-utils'
 const Home = ({ setPage }: { setPage: (page: Page) => void }) => {
     // Array with the state of each of the 32 playable dark tiles in the checkers board
     const gameState: GameState = {
-        status: 'SEARCHING',
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
-        previousMove: undefined
+        previousMove: undefined,
     }
 
     return (
@@ -19,6 +18,7 @@ const Home = ({ setPage }: { setPage: (page: Page) => void }) => {
             <h1>CHECKERED</h1>
             <GameBoard gameState={gameState} onPieceMove={() => {}} />
             <SearchButton onClick={() => setPage(Page.GAME)} />
+            <button onClick={() => setPage(Page.LEADERBOARD)}>Leaderboard</button>
         </div>
     )
 }

@@ -8,8 +8,8 @@ export type BackendServer = {
 }
 
 const defaultTestingServer: BackendServer = {
-    apiUrl: 'http://localhost:3000/api',
-    wsUrl: 'ws://localhost:3000/ws',
+    apiUrl: 'http://localhost:8080/api',
+    wsUrl: 'ws://localhost:8080/ws',
     priority: 1,
 }
 
