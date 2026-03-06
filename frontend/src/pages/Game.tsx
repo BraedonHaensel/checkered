@@ -30,7 +30,7 @@ const DEFAULT_GAME_STATE: GameState = {
     isYourTurn: false,
     previousMoves: [],
     opponent: 'Opponent',
-    draw_requested: false
+    draw_requested: false,
 }
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
@@ -218,8 +218,8 @@ const Game = ({
         }))
     })
 
-    session.on("request_draw", () => {
-        setGameState(oldState => ({
+    session.on('request_draw', () => {
+        setGameState((oldState) => ({
             ...oldState,
             draw_requested: true,
         }))
@@ -268,11 +268,11 @@ const Game = ({
             break
         case 'FINISHED':
             statusMessage =
-                gameStatus.winner === "draw" 
-                    ? "Draw!"
+                gameStatus.winner === 'draw'
+                    ? 'Draw!'
                     : gameState.playerColor === gameStatus.winner
-                        ? 'Your win!'
-                        : 'You lose!'
+                      ? 'Your win!'
+                      : 'You lose!'
             break
     }
 
@@ -283,8 +283,8 @@ const Game = ({
     }
 
     const draw = () => {
-        session.send({type: "request_draw"})
-        setGameState(old => ({...old, draw_requested: true}))
+        session.send({ type: 'request_draw' })
+        setGameState((old) => ({ ...old, draw_requested: true }))
     }
 
     const opponentColor = gameState.playerColor === 'red' ? 'black' : 'red'
@@ -318,7 +318,7 @@ const Game = ({
                         lost={lost}
                         turn={
                             gameStatus.state === 'IN_GAME' &&
-                            !gameState.isYourTurn
+                            gameState.isYourTurn
                         }
                     />
                 </div>
@@ -340,7 +340,10 @@ const Game = ({
                         exitsGame={gameStatus.state === 'IN_GAME'}
                     />
                     {gameStatus.state === 'IN_GAME' && (
-                        <DrawButton onClick={() => draw()} requested={gameState.draw_requested} />
+                        <DrawButton
+                            onClick={() => draw()}
+                            requested={gameState.draw_requested}
+                        />
                     )}
                     {gameStatus.state === 'FINISHED' && (
                         <SearchButton onClick={resetState} />
