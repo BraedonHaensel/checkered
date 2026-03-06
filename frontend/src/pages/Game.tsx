@@ -186,7 +186,7 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
     }
 
     return (
-        <div className="space-y-6">
+        <div>
             <h1>CHECKERED</h1>
             <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
             {gameStatus.state === 'SEARCHING' && (

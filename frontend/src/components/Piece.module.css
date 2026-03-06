@@ -6,6 +6,10 @@
     color: #242424;
 }
 
+.piece.white {
+    color: #dbdbdb;
+}
+
 .piece {
     display: flex;
     position: relative;
@@ -45,5 +49,9 @@
 }
 
 .piece.black::after {
+    border: 3px dotted gray;
+}
+
+.piece.white::after {
     border: 3px dotted gray;
 }
