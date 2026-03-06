@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useReducer, useState } from 'react'
 import GameBoard from '../components/GameBoard'
 import { Page, PlayerColor, TileState } from '../enums'
 import {
@@ -18,24 +18,20 @@ import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { IngameDetails } from '../components/GameDetails'
-import { DashboardButton, DrawButton } from '../components/Buttons'
+import { DashboardButton, DrawButton, SearchButton } from '../components/Buttons'
+
 const DEFAULT_GAME_STATE: GameState = {
     tileStates: getNewBoardTileStates(),
     playerColor: PlayerColor.BLACK,
     isYourTurn: false,
-    previousMove: undefined,
+    previousMoves: [],
+    opponent: "Opponent",
 };
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' };
 
 const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }) => {
     const session = useSession(user);
-    const [gameState, setGameState] = useState<GameState>({
-        tileStates: getNewBoardTileStates(),
-        playerColor: PlayerColor.BLACK,
-        isYourTurn: false,
-        previousMoves: [],
-        opponent: "Opponent",
-    });
+    const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE);
     const [gameStatus, setGameStatus] = useReducer<GameStatus, [GameStatus], [GameStatus]>((prev, ...arg) => {
         if (arg.length != 1) {
             console.error('Unexpected state update', arg)
@@ -229,6 +225,12 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
             break;
     }
 
+    const forfeit = () => {
+        session.send({
+            type: "forfeit"
+        })
+    }
+
     const opponentColor = gameState.playerColor === "red" ? "black" : "red"
 
     const captured = 12 - pieceCount(gameState.tileStates, opponentColor)
@@ -243,8 +245,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                 <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} turn={gameState.isYourTurn}/>
             </div>
             <IngameDetails statusMessage={statusMessage} moves={gameStatus.state === "SEARCHING" ? undefined : gameState.previousMoves}>
-                <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? alert("TODO") : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
+                <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? forfeit() : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
                 {gameStatus.state === "IN_GAME" && <DrawButton onClick={() => alert("TODO")} />}
+                {gameStatus.state === "FINISHED" && <SearchButton onClick={resetState} />}
             </IngameDetails>
         </div>
     </div>
