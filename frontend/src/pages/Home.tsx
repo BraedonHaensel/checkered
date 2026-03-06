@@ -20,9 +20,9 @@ const Home = ({ setPage, user }: { setPage: (page: Page) => void, user: string }
         <h1 className='w-full text-center'>CHECKERED</h1>
         <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
             <div className="flex flex-col min-h-[67lvh] items-center h-full w-full">
-                <PlayerCard player="Opponent" color={PlayerColor.RED} captured={0} lost={0}/>
+                <PlayerCard player="Opponent" color={PlayerColor.RED} captured={0} lost={0} turn={false}/>
                 <GameBoard gameState={gameState} onPieceMove={() => {}} />
-                <PlayerCard player={user} color={PlayerColor.BLACK}  captured={0} lost={0} />
+                <PlayerCard player={user} color={PlayerColor.BLACK}  captured={0} lost={0} turn={false} />
             </div>
             <IngameDetails statusMessage={`Welcome, ${user}`}>
                 <SearchButton onClick={() => setPage(Page.GAME)} />

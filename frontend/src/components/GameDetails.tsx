@@ -38,8 +38,11 @@ export const IngameDetails = ({children, statusMessage, moves}: {children: any[]
                 <hr />
                 <div className="flex flex-col items-center h-full w-full overflow-auto flrx-grow min-h-0 max-h-[70vh]">
                     <div className="grid grid-cols-2 items-center w-full">
-                        <b className="text-center">Black</b>
-                        <b className="text-center">Red</b>
+                        { moves && <>
+                            <b className="text-center">Black</b>
+                            <b className="text-center">Red</b>
+                        </>
+                        }
                         {
                             combinedMoves.map((move, i) => (
                                 <span key={i} className="text-center text-wrap block wrap-break-word">{move}</span>

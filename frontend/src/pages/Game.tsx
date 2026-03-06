@@ -213,11 +213,11 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         <h1 className='w-full text-center'>CHECKERED</h1>
         <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
             <div className="flex flex-col min-h-[67lvh] items-center h-full w-full">
-                <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured}/>
+                <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured} turn={!gameState.isYourTurn}/>
                 <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
-                <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} />
+                <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} turn={gameState.isYourTurn}/>
             </div>
-            <IngameDetails statusMessage={statusMessage} moves={gameState.previousMoves}>
+            <IngameDetails statusMessage={statusMessage} moves={gameStatus.state === "SEARCHING" ? undefined : gameState.previousMoves}>
                 <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? alert("TODO") : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
                 {gameStatus.state === "IN_GAME" && <DrawButton onClick={() => alert("TODO")} />}
             </IngameDetails>
