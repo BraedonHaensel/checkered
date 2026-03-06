@@ -23,10 +23,23 @@ type Client struct {
 
 	// used to send messages to the client via websocket
 	send chan []byte
+
+	// the registration channel
+	register func(*Client)
+	enqueued bool
 }
 
 type ClientMessage struct {
 	Payload interface{}
+}
+
+func parseMessage[T any](data []byte) (interface{}, error) {
+	var msg T
+	err := json.Unmarshal(data, &msg)
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
 
 func decodePayload(data []byte) (interface{}, error) {
@@ -35,27 +48,38 @@ func decodePayload(data []byte) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, is_game_move := raw["source_index"]
-	// its a game move
-	if is_game_move {
-		var gameMove GameMove
-		err := json.Unmarshal(data, &gameMove)
-		if err != nil {
-			return nil, err
-		}
-		return gameMove, err
+	// Determine the type of the message
+	msg_type_bytes, has_type := raw["type"]
+	if !has_type {
+		// Invalid message
+		return nil, fmt.Errorf("unknown payload type")
 	}
-	_, is_found_game := raw["game_id"]
-	// its a game move
-	if is_found_game {
-		var foundGame FoundGame
-		err := json.Unmarshal(data, &foundGame)
-		if err != nil {
-			log.Printf("%s", err)
-			return nil, err
-		}
-		return foundGame, err
+	var msg_type string
+	err = json.Unmarshal(msg_type_bytes, &msg_type)
+	if err != nil {
+		// Type field is of wrong type
+		return nil, fmt.Errorf("unable to decode payload")
 	}
+	// Parse the message based on the type
+	switch msg_type {
+	case "move":
+		return parseMessage[GameMove](data)
+	case "enqueue":
+		return parseMessage[EnqueueRequest](data)
+	}
+
+	// _, is_found_game := raw["game_id"]
+	// // its a game move
+	// if is_found_game {
+	// 	var foundGame FoundGame
+	// 	err := json.Unmarshal(data, &foundGame)
+	// 	log.Printf("Game found")
+	// 	if err != nil {
+	// 		log.Printf("%s", err)
+	// 		return nil, err
+	// 	}
+	// 	return foundGame, err
+	// }
 
 	return nil, fmt.Errorf("unknown payload type")
 }
@@ -95,8 +119,13 @@ func (c *Client) readThread() {
 		}
 		switch p := payload.(type) {
 		case GameMove:
+			// log.Printf("Received message (%s)\n", p.Kind)
 			c.handleNewMove(p)
-		case FoundGame:
+		case EnqueueRequest:
+			// log.Printf("Received message (%s)\n", p.Kind)
+			c.register(c) // Enqueue
+		case FoundGame: // TODO: remove as is not an actual message the client can send
+			// log.Printf("Received message (%s)\n", p.Kind)
 			c.handleFoundGame(p)
 		}
 	}
@@ -116,6 +145,10 @@ type GameStateUpdate struct {
 type GameEndMessage struct {
 	Kind   string `json:"type"`
 	Winner string `json:"winner"`
+}
+
+type EnqueueRequest struct {
+	Kind string `json:"type"`
 }
 
 func (c *Client) handleNewMove(p GameMove) {
@@ -152,7 +185,7 @@ func otherPlayer(username string, game *Game) *Client {
 	return game.blackPlayer
 }
 
-func NewClient(username string, connection *websocket.Conn) Client {
+func NewClient(username string, connection *websocket.Conn, register func(*Client)) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
 		username:    username,
@@ -160,6 +193,8 @@ func NewClient(username string, connection *websocket.Conn) Client {
 		status:      IDLE,
 		currentGame: nil,
 		send:        make(chan []byte),
+		register:    register,
+		enqueued:    false,
 	}
 	return c
 }

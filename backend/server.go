@@ -54,6 +54,10 @@ type RegisterMessage struct {
 	Username string `json:"user"`
 }
 
+type ConfirmRegistration struct {
+	Kind string `json:"type"`
+}
+
 func checkOrigin(r *http.Request) bool {
 	return true
 }
@@ -75,13 +79,22 @@ func serveWs(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn)
+	client := NewClient(registerMessage.Username, conn, func(client *Client) {
+		server.register <- client
+	})
+	server.clients[client.username] = &client
 
 	go client.readThread()
 	go client.writeThread()
 
+	// Send confirmation of registration to client
+	confirmation_msg := ConfirmRegistration{Kind: "registered"}
+	confirmation, err := json.Marshal(confirmation_msg)
+	client.send <- confirmation
+
 	// let the server know and handle the new client
-	server.register <- &client
+	// server.register <- &client
+	log.Printf("Client \"%s\" connected", client.username)
 
 }
 
@@ -91,14 +104,20 @@ func (server *Server) serverLoop() {
 	log.Println("Server Running...")
 	for {
 		select {
-		case new_client := <-server.register:
-			server.clients[new_client.username] = new_client
-			log.Printf(
-				"New client \"%s\"",
-				new_client.username,
-			)
-			// queue the new client into a game
-			Enqueue(&server.readyQueue, new_client)
+		case client := <-server.register:
+			if client.enqueued {
+				log.Printf("Client \"%s\" is already enqueued", client.username)
+			} else {
+				log.Printf("Client \"%s\" has joined the queue", client.username)
+				// queue the new client into a game
+				client.enqueued = true
+				server.readyQueue.enqueue(client)
+				log.Println("Queue:")
+				server.readyQueue.forEach(func(c *Client, i int) {
+					log.Printf("\t%d: %s", i, c.username)
+				})
+				log.Println("=================")
+			}
 		case unregister := <-server.unregister:
 			delete(server.clients, unregister.username)
 			log.Printf(
@@ -112,8 +131,10 @@ func (server *Server) serverLoop() {
 			if server.readyQueue.size < 2 {
 				break
 			}
-			redPlayer := Dequeue(&server.readyQueue)
-			blackPlayer := Dequeue(&server.readyQueue)
+			redPlayer := server.readyQueue.dequeue()
+			blackPlayer := server.readyQueue.dequeue()
+			redPlayer.enqueued = false
+			blackPlayer.enqueued = false
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
 			gameRoom := Game{
 				gameID:       uuid.New(),

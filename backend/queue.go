@@ -32,15 +32,14 @@ func InitQueue[T any](queue *Queue[T], size int) {
 /*
 Add an element to the queue
 Args:
-	- queue *Queue[T]: Pointer to the queue to add the element to
 	- value T: The value to add
 */
-func Enqueue[T any](queue *Queue[T], value T) {
+func (queue *Queue[T]) enqueue(value T) {
 	if queue.size == queue.maxSize {
 		panic("Queue Overflow!")
 	}
 	queue.arr[queue.tail] = value
-	queue.tail++
+	queue.tail = (queue.tail + 1) % queue.maxSize
 	queue.size++
 }
 
@@ -51,12 +50,18 @@ Args:
 Returns:
 	- T: The element removed
 */
-func Dequeue[T any](queue *Queue[T]) T {
+func (queue *Queue[T]) dequeue() T {
 	if queue.size == 0 {
 		panic("Queue Empty!")
 	}
 	res := queue.arr[queue.head]
-	queue.head++
+	queue.head = (queue.head + 1) % queue.maxSize
 	queue.size--
 	return res
+}
+
+func (queue *Queue[T]) forEach(callback func(T, int)) {
+	for i := 0; i < queue.size; i++ {
+		callback(queue.arr[(queue.head+i)%queue.maxSize], i)
+	}
 }
