@@ -18,36 +18,54 @@ import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { IngameDetails } from '../components/GameDetails'
-import { DashboardButton, DrawButton, SearchButton } from '../components/Buttons'
+import {
+    DashboardButton,
+    DrawButton,
+    SearchButton,
+} from '../components/Buttons'
 
 const DEFAULT_GAME_STATE: GameState = {
     tileStates: getNewBoardTileStates(),
     playerColor: PlayerColor.BLACK,
     isYourTurn: false,
     previousMoves: [],
-    opponent: "Opponent",
-};
-const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' };
+    opponent: 'Opponent',
+}
+const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
-const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }) => {
-    const session = useSession(user);
-    const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE);
-    const [gameStatus, setGameStatus] = useReducer<GameStatus, [GameStatus], [GameStatus]>((prev, ...arg) => {
-        if (arg.length != 1) {
-            console.error('Unexpected state update', arg)
-            return prev
-        }
-        const newState = arg[0]
-        if (prev.state != 'SEARCHING' && newState.state === 'SEARCHING') {
+const Game = ({
+    user,
+    setPage,
+}: {
+    user: string
+    setPage: (page: Page) => void
+}) => {
+    const session = useSession(user)
+    const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE)
+    const [gameStatus, setGameStatus] = useReducer<
+        GameStatus,
+        [GameStatus],
+        [GameStatus]
+    >(
+        (prev, ...arg) => {
+            if (arg.length != 1) {
+                console.error('Unexpected state update', arg)
+                return prev
+            }
+            const newState = arg[0]
+            if (prev.state != 'SEARCHING' && newState.state === 'SEARCHING') {
+                console.log('Searching...')
+                session.send({ type: 'enqueue' })
+            }
+            return newState
+        },
+        [DEFAULT_GAME_STATUS],
+        (i) => {
             console.log('Searching...')
-            session.send({ type: 'enqueue' });
+            session.send({ type: 'enqueue' })
+            return i[0]
         }
-        return newState
-    }, [DEFAULT_GAME_STATUS], (i) => {
-        console.log('Searching...')
-        session.send({ type: 'enqueue' });
-        return i[0];
-    });
+    )
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
@@ -97,9 +115,13 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                         ...prev,
                         tileStates: newTileStates,
                         isYourTurn: false,
-                        previousMoves: [...prev.previousMoves, {
-                            sourceIndex, destIndex
-                        }],
+                        previousMoves: [
+                            ...prev.previousMoves,
+                            {
+                                sourceIndex,
+                                destIndex,
+                            },
+                        ],
                     }
                 }
             }
@@ -119,9 +141,13 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     return {
                         ...prev,
                         tileStates: newTileStates,
-                        previousMoves: [...prev.previousMoves, {
-                            sourceIndex, destIndex
-                        }],
+                        previousMoves: [
+                            ...prev.previousMoves,
+                            {
+                                sourceIndex,
+                                destIndex,
+                            },
+                        ],
                     }
                 }
             }
@@ -132,9 +158,13 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     ...prev,
                     tileStates: newTileStates,
                     isYourTurn: false,
-                    previousMoves: [...prev.previousMoves, {
-                        sourceIndex, destIndex
-                    }],
+                    previousMoves: [
+                        ...prev.previousMoves,
+                        {
+                            sourceIndex,
+                            destIndex,
+                        },
+                    ],
                 }
             }
 
@@ -143,16 +173,20 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                 ...prev,
                 tileStates: newTileStates,
                 isYourTurn: gameState.playerColor === waitingPlayerColor,
-                previousMoves: [...prev.previousMoves, {
-                    sourceIndex, destIndex
-                }],
+                previousMoves: [
+                    ...prev.previousMoves,
+                    {
+                        sourceIndex,
+                        destIndex,
+                    },
+                ],
             }
         })
     }
 
     const resetState = () => {
-        updateGameState(DEFAULT_GAME_STATE);
-        setGameStatus(DEFAULT_GAME_STATUS);
+        updateGameState(DEFAULT_GAME_STATE)
+        setGameStatus(DEFAULT_GAME_STATUS)
     }
 
     session.on('start', (message) => {
@@ -165,23 +199,23 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         })
     })
 
-    session.on("update_state", (message) => {
+    session.on('update_state', (message) => {
         console.log(`Update State`, message)
         setGameState((oldState: GameState) => ({
             ...oldState,
             tileStates: message.tile_states,
-            previousMoves: message.previous_moves.map(move => ({
+            previousMoves: message.previous_moves.map((move) => ({
                 sourceIndex: move.source_index,
                 destIndex: move.destination_index,
             })),
-            isYourTurn: message.turn == oldState.playerColor
+            isYourTurn: message.turn == oldState.playerColor,
         }))
     })
 
-    session.on("game_end", (message) => {
-        console.log("Game Over!", message);
+    session.on('game_end', (message) => {
+        console.log('Game Over!', message)
         setGameStatus({
-            state: "FINISHED",
+            state: 'FINISHED',
             winner: message.winner,
         })
         setGameState((oldState) => ({
@@ -207,50 +241,86 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         performPieceMove(source_index, destination_index)
     }
 
-    let statusMessage = "Unknown";
+    let statusMessage = 'Unknown'
 
-    switch(gameStatus.state) {
-        case "SEARCHING":
-            statusMessage = "Searching for Opponent..."
-            break;
-        case "IN_GAME":
-            statusMessage = gameState.isYourTurn 
-                ? 'Your turn!' 
+    switch (gameStatus.state) {
+        case 'SEARCHING':
+            statusMessage = 'Searching for Opponent...'
+            break
+        case 'IN_GAME':
+            statusMessage = gameState.isYourTurn
+                ? 'Your turn!'
                 : "Opponent's turn..."
-            break;
-        case "FINISHED":
-            statusMessage = gameState.playerColor === gameStatus.winner
-                ? 'Your win!'
-                : 'You lose!'
-            break;
+            break
+        case 'FINISHED':
+            statusMessage =
+                gameState.playerColor === gameStatus.winner
+                    ? 'Your win!'
+                    : 'You lose!'
+            break
     }
 
     const forfeit = () => {
         session.send({
-            type: "forfeit"
+            type: 'forfeit',
         })
     }
 
-    const opponentColor = gameState.playerColor === "red" ? "black" : "red"
+    const opponentColor = gameState.playerColor === 'red' ? 'black' : 'red'
 
     const captured = 12 - pieceCount(gameState.tileStates, opponentColor)
     const lost = 12 - pieceCount(gameState.tileStates, gameState.playerColor)
 
-    return <div className="h-lvh grid grid-rows-[min-content_1fr] justify-center items-center pt-5">
-        <h1 className='w-full text-center'>CHECKERED</h1>
-        <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
-            <div className="flex flex-col min-h-[67lvh] items-center h-full w-full">
-                <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured} turn={!gameState.isYourTurn}/>
-                <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
-                <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} turn={gameState.isYourTurn}/>
+    return (
+        <div className="grid h-lvh grid-rows-[min-content_1fr] items-center justify-center pt-5">
+            <h1 className="w-full text-center">CHECKERED</h1>
+            <div className="grid w-[100vw] grid-cols-[1fr] grid-rows-[auto_min-content] items-center md:h-full md:grid-cols-[2fr_1fr] md:grid-rows-[1fr]">
+                <div className="flex h-full min-h-[67lvh] w-full flex-col items-center">
+                    <PlayerCard
+                        player={gameState.opponent}
+                        color={opponentColor}
+                        captured={lost}
+                        lost={captured}
+                        turn={!gameState.isYourTurn}
+                    />
+                    <GameBoard
+                        gameState={gameState}
+                        onPieceMove={handlePieceMove}
+                    />
+                    <PlayerCard
+                        player={user}
+                        color={gameState.playerColor}
+                        captured={captured}
+                        lost={lost}
+                        turn={gameState.isYourTurn}
+                    />
+                </div>
+                <IngameDetails
+                    statusMessage={statusMessage}
+                    moves={
+                        gameStatus.state === 'SEARCHING'
+                            ? undefined
+                            : gameState.previousMoves
+                    }
+                >
+                    <DashboardButton
+                        onClick={() =>
+                            gameStatus.state === 'IN_GAME'
+                                ? forfeit()
+                                : setPage(Page.HOME)
+                        }
+                        exitsGame={gameStatus.state === 'IN_GAME'}
+                    />
+                    {gameStatus.state === 'IN_GAME' && (
+                        <DrawButton onClick={() => alert('TODO')} />
+                    )}
+                    {gameStatus.state === 'FINISHED' && (
+                        <SearchButton onClick={resetState} />
+                    )}
+                </IngameDetails>
             </div>
-            <IngameDetails statusMessage={statusMessage} moves={gameStatus.state === "SEARCHING" ? undefined : gameState.previousMoves}>
-                <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? forfeit() : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
-                {gameStatus.state === "IN_GAME" && <DrawButton onClick={() => alert("TODO")} />}
-                {gameStatus.state === "FINISHED" && <SearchButton onClick={resetState} />}
-            </IngameDetails>
         </div>
-    </div>
+    )
 }
 
 export default Game
