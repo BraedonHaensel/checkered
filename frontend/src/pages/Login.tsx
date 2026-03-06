@@ -10,18 +10,21 @@ const Login = ({
 }) => {
     const usernameRef = useRef<HTMLInputElement>(null)
     return (
-        <div>
-            <input type="text" placeholder="Username" ref={usernameRef} />
-            <button
-                onClick={() => {
-                    if (usernameRef.current?.value) {
-                        setUser(usernameRef.current.value || '')
-                        setPage(Page.HOME)
-                    }
-                }}
-            >
-                Login
-            </button>
+        <div className='loginPageRoot'>
+            <div className='loginCard'>
+                <h2 className="loginTitle">USER LOGIN</h2>
+                <input type="text" placeholder="Username" ref={usernameRef} className="loginInput"/>
+                <button className="loginButton"
+                    onClick={() => {
+                        if (usernameRef.current?.value) {
+                            setUser(usernameRef.current.value || '')
+                            setPage(Page.HOME)
+                        }
+                    }}
+                >
+                    Login
+                </button>
+            </div>
         </div>
     )
 }
