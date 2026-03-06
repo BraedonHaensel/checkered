@@ -212,7 +212,7 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
     return <div className="h-lvh grid grid-rows-[min-content_1fr] justify-center items-center pt-5">
         <h1 className='w-full text-center'>CHECKERED</h1>
         <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
-            <div className="flex flex-col min-h-[80lvh] items-center h-full w-full">
+            <div className="flex flex-col min-h-[67lvh] items-center h-full w-full">
                 <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured}/>
                 <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
                 <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} />
