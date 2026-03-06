@@ -136,7 +136,7 @@ func (c *Client) readThread() {
 	}
 }
 
-func getOpponentColor(game Game, client Client) PieceColor {
+func getOpponentColor(game *Game, client Client) PieceColor {
 	if game.blackPlayer.username == client.username {
 		return Red
 	}
@@ -145,8 +145,10 @@ func getOpponentColor(game Game, client Client) PieceColor {
 
 func (c *Client) handleDisconnect() {
 	log.Printf("User %s disconnected", c.username)
+	c.currentGame.mu.Lock()
+	defer c.currentGame.mu.Unlock()
 	if c.currentGame != nil {
-		c.currentGame.turn = getOpponentColor(*c.currentGame, *c)
+		c.currentGame.turn = getOpponentColor(c.currentGame, *c)
 		c.currentGame.handleGameEnd()
 	}
 	c.unregister <- c
@@ -173,7 +175,8 @@ type EnqueueRequest struct {
 }
 
 func (c *Client) handleNewMove(p GameMove) {
-
+	c.currentGame.mu.Lock()
+	c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
