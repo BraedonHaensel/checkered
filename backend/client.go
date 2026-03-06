@@ -64,8 +64,9 @@ func decodePayload(data []byte) (interface{}, error) {
 
 // message that is sent to the client when a game has been found
 type FoundGame struct {
-	Kind string `json:"type"`
-	Side string `json:"player_color"`
+	Kind 		string `json:"type"`
+	Side 		string `json:"player_color"`
+	Opponent 	string `json:"opponent"`
 }
 
 func (c *Client) writeThread() {
@@ -127,10 +128,10 @@ func (c *Client) handleFoundGame(p FoundGame) {
 }
 
 type GameStateUpdate struct {
-	Kind         string      `json:"type"`
-	TileStates   []TileState `json:"tile_states"`
-	Turn         string      `json:"turn"`
-	PreviousMove *GameMove   `json:"previous_move,omitempty"`
+	Kind         	string      `json:"type"`
+	TileStates   	[]TileState `json:"tile_states"`
+	Turn         	string      `json:"turn"`
+	PreviousMoves	[]GameMove   `json:"previous_moves"`
 }
 
 type GameEndMessage struct {
@@ -143,10 +144,10 @@ func (c *Client) handleNewMove(p GameMove) {
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
-		Kind:         "update_state",
-		TileStates:   c.currentGame.tileStates,
-		Turn:         "red",
-		PreviousMove: c.currentGame.previousMove,
+		Kind:         	"update_state",
+		TileStates:   	c.currentGame.tileStates,
+		Turn:         	"red",
+		PreviousMoves: 	c.currentGame.previousMoves,
 	}
 
 	if c.currentGame.turn == Black {

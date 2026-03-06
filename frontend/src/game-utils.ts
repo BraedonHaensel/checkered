@@ -17,6 +17,22 @@ export const getNewBoardTileStates = (): TileState[] => {
     return tileStates
 }
 
+export const pieceCount = (tileStates: TileState[], color: PlayerColor): number => {
+    const isColor = color === "black" ? 
+        isBlackPiece : 
+        isRedPiece;
+
+    let count = 0;
+    for(let i = 0; i < tileStates.length; i++) {
+        const state = tileStates[i]
+        if(isColor(state)) {
+            count++
+        }
+    }
+
+    return count;
+}
+
 /**
  * Checks if the given tileState is for a black piece (standard or king).
  *
@@ -38,8 +54,8 @@ export const isBlackPiece = (tileState: TileState): boolean => {
  */
 export const isRedPiece = (tileState: TileState): boolean => {
     return [
-        TileState.BLACK_STANDARD_PIECE,
-        TileState.BLACK_KING_PIECE,
+        TileState.RED_STANDARD_PIECE,
+        TileState.RED_KING_PIECE,
     ].includes(tileState)
 }
 

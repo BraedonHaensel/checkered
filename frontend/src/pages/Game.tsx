@@ -12,17 +12,21 @@ import {
     containsJumpMove,
     hasRemainingPieces,
     hasLegalMoves,
+    pieceCount,
 } from '../game-utils'
 import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
-import { ReturnToDashboardButton } from '../components/ReturnToDashboardButton'
+import { PlayerCard } from '../components/PlayerCard'
+import { IngameDetails } from '../components/GameDetails'
+import { DashboardButton, DrawButton } from '../components/Buttons'
 
 const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }) => {
     const [gameState, setGameState] = useState<GameState>({
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
-        previousMove: undefined,
+        previousMoves: [],
+        opponent: "Opponent",
     })
     const [gameStatus, setGameStatus] = useState<GameStatus>({
         state: 'SEARCHING',
@@ -77,10 +81,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                         ...prev,
                         tileStates: newTileStates,
                         isYourTurn: false,
-                        previousMove: {
-                            sourceIndex,
-                            destIndex,
-                        },
+                        previousMoves: [...prev.previousMoves, {
+                            sourceIndex, destIndex
+                        }],
                     }
                 }
             }
@@ -100,10 +103,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     return {
                         ...prev,
                         tileStates: newTileStates,
-                        previousMove: {
-                            sourceIndex,
-                            destIndex,
-                        },
+                        previousMoves: [...prev.previousMoves, {
+                            sourceIndex, destIndex
+                        }],
                     }
                 }
             }
@@ -114,10 +116,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     ...prev,
                     tileStates: newTileStates,
                     isYourTurn: false,
-                    previousMove: {
-                        sourceIndex,
-                        destIndex,
-                    },
+                    previousMoves: [...prev.previousMoves, {
+                        sourceIndex, destIndex
+                    }],
                 }
             }
 
@@ -126,10 +127,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                 ...prev,
                 tileStates: newTileStates,
                 isYourTurn: gameState.playerColor === waitingPlayerColor,
-                previousMove: {
-                    sourceIndex,
-                    destIndex,
-                },
+                previousMoves: [...prev.previousMoves, {
+                    sourceIndex, destIndex
+                }],
             }
         })
     }
@@ -140,6 +140,7 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         updateGameState({
             playerColor: message.player_color,
             isYourTurn: message.player_color === PlayerColor.BLACK,
+            opponent: message.opponent,
         })
     })
 
@@ -148,10 +149,10 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         setGameState((oldState: GameState) => ({
             ...oldState,
             tileStates: message.tile_states,
-            previousMove: message.previous_move ? {
-                sourceIndex: message.previous_move.source_index,
-                destIndex: message.previous_move.destination_index,
-            } : message.previous_move,
+            previousMoves: message.previous_moves.map(move => ({
+                sourceIndex: move.source_index,
+                destIndex: move.destination_index,
+            })),
             isYourTurn: message.turn == oldState.playerColor
         }))
     })
@@ -185,28 +186,43 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         performPieceMove(source_index, destination_index)
     }
 
-    return (
-        <div className="space-y-6">
-            <h1>CHECKERED</h1>
-            <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
-            {gameStatus.state === 'SEARCHING' && (
-                <p>Searching for an opponent...</p>
-            )}
-            {gameStatus.state === 'IN_GAME' && (
-                <p className="text-2xl">
-                    {gameState.isYourTurn ? 'Your turn!' : "Opponent's turn..."}
-                </p>
-            )}
-            {gameStatus.state === 'FINISHED' && <>
-                <p className="text-2xl">
-                    {gameState.playerColor === gameStatus.winner
-                        ? 'Your win!'
-                        : 'You lose!'}
-                </p>
-                <ReturnToDashboardButton setPage={setPage} />
-            </>}
+    let statusMessage = "Unknown";
+
+    switch(gameStatus.state) {
+        case "SEARCHING":
+            statusMessage = "Searching for Opponent..."
+            break;
+        case "IN_GAME":
+            statusMessage = gameState.isYourTurn 
+                ? 'Your turn!' 
+                : "Opponent's turn..."
+            break;
+        case "FINISHED":
+            statusMessage = gameState.playerColor === gameStatus.winner
+                ? 'Your win!'
+                : 'You lose!'
+            break;
+    }
+
+    const opponentColor = gameState.playerColor === "red" ? "black" : "red"
+
+    const captured = 12 - pieceCount(gameState.tileStates, opponentColor)
+    const lost = 12 - pieceCount(gameState.tileStates, gameState.playerColor)
+
+    return <div className="h-lvh grid grid-rows-[min-content_1fr] justify-center items-center pt-5">
+        <h1 className='w-full text-center'>CHECKERED</h1>
+        <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
+            <div className="flex flex-col min-h-[67lvh] items-center h-full w-full">
+                <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured} turn={!gameState.isYourTurn}/>
+                <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
+                <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} turn={gameState.isYourTurn}/>
+            </div>
+            <IngameDetails statusMessage={statusMessage} moves={gameStatus.state === "SEARCHING" ? undefined : gameState.previousMoves}>
+                <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? alert("TODO") : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
+                {gameStatus.state === "IN_GAME" && <DrawButton onClick={() => alert("TODO")} />}
+            </IngameDetails>
         </div>
-    )
+    </div>
 }
 
 export default Game

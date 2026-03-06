@@ -117,18 +117,18 @@ func (server *Server) serverLoop() {
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
 			gameRoom := Game{
-				gameID:       uuid.New(),
-				redPlayer:    redPlayer,
-				blackPlayer:  blackPlayer,
-				tileStates:   generateInitialTileStates(),
-				turn:         Red,
-				previousMove: nil,
+				gameID:       	uuid.New(),
+				redPlayer:    	redPlayer,
+				blackPlayer:  	blackPlayer,
+				tileStates:   	generateInitialTileStates(),
+				turn:         	Red,
+				previousMoves: 	make([]GameMove, 0),
 				resultChan:   server.gameResults,
 			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
-			redMessage := gameRoom.messageFromNewGame("red")
-			blackMessage := gameRoom.messageFromNewGame("black")
+			redMessage := gameRoom.messageFromNewGame("red", blackPlayer.username)
+			blackMessage := gameRoom.messageFromNewGame("black", redPlayer.username)
 			redBytes, err := json.Marshal(redMessage)
 			if err != nil {
 				log.Println(err)
@@ -151,13 +151,6 @@ func (server *Server) serverLoop() {
 func main() {
 	flag.Parse()
 	server := InitServer()
-	server.leaderboard.AddPlayerToLeaderboard("akeuben")
-	server.leaderboard.AddPlayerToLeaderboard("test")
-	server.leaderboard.UpdateLeaderboard(GameResult{
-		gameID: uuid.New(),
-		winner: "akeuben",
-		loser:  "test",
-	})
 	go server.serverLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(server, w, r)
