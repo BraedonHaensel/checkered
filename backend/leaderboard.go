@@ -31,13 +31,17 @@ func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
 }
 
 func (lb *Leaderboard) UpdateLeaderboard(result GameResult) {
-	lb.AddPlayerToLeaderboard(result.winner)
-	lb.AddPlayerToLeaderboard(result.loser)
+	if result.loser == nil || result.winner == nil {
+		return
+	}
+
+	lb.AddPlayerToLeaderboard(*result.winner)
+	lb.AddPlayerToLeaderboard(*result.loser)
 	for i := range lb.Board {
-		if lb.Board[i].Username == result.winner {
+		if lb.Board[i].Username == *result.winner {
 			lb.Board[i].Wins++
 		}
-		if lb.Board[i].Username == result.loser {
+		if lb.Board[i].Username == *result.loser {
 			lb.Board[i].Losses++
 		}
 	}

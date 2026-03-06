@@ -16,4 +16,5 @@ export interface GameState {
     isYourTurn: boolean
     previousMoves: PreviousMove[]
     opponent: string
+    draw_requested: boolean
 }

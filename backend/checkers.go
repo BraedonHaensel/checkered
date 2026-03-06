@@ -33,13 +33,15 @@ const (
 )
 
 type Game struct {
-	gameID        uuid.UUID
-	redPlayer     *Client
-	blackPlayer   *Client
-	tileStates    []TileState
-	turn          PieceColor
-	previousMoves []GameMove
-	resultChan    chan GameResult
+	gameID       	uuid.UUID
+	redPlayer    	*Client
+	blackPlayer  	*Client
+	tileStates   	[]TileState
+	turn         	PieceColor
+	previousMoves	[]GameMove
+	resultChan   	chan GameResult
+	blackWantsDraw	bool
+	redWantsDraw	bool
 	mu            sync.Mutex
 }
 
@@ -398,6 +400,8 @@ func (game *Game) playMove(gameMove GameMove) bool {
 	if !game.isValidMove(gameMove) {
 		return false
 	}
+	game.redWantsDraw = false 
+	game.blackWantsDraw = false
 	newTileStates := make([]TileState, len(game.tileStates))
 	copy(newTileStates, game.tileStates)
 
@@ -523,8 +527,29 @@ func (game *Game) handleGameEnd() {
 	// tell the server the result to update the leaderboard
 	gameResult := GameResult{
 		gameID: game.gameID,
-		winner: winnerUsername,
-		loser:  loserUsername,
+		winner: &winnerUsername,
+		loser:  &loserUsername,
+	}
+	game.resultChan <- gameResult
+}
+
+func (game *Game) handleGameDraw() {
+	endMessage := GameEndMessage{
+		Kind:   "game_end",
+		Winner: "draw",
+	}
+	endMessageJson, err := json.Marshal(endMessage)
+	if err != nil {
+		panic("Marshalling Error")
+	}
+	game.blackPlayer.send <- endMessageJson
+	game.redPlayer.send <- endMessageJson
+
+	// tell the server the result to update the leaderboard
+	gameResult := GameResult{
+		gameID: game.gameID,
+		winner: nil,
+		loser: nil,
 	}
 	game.resultChan <- gameResult
 }
@@ -546,7 +571,7 @@ type GameMove struct {
 type GameResult struct {
 	gameID uuid.UUID
 	// username of the winner
-	winner string
+	winner *string
 	// username of the loser
-	loser string
+	loser *string
 }

@@ -37,6 +37,8 @@ export interface GameEndMessage extends GenericMessage<'game_end'> {
 
 export interface ForfeitMessage extends GenericMessage<'forfeit'> {}
 
+export interface RequestDraw extends GenericMessage<'request_draw'> {}
+
 export type Message =
     | JoinMessage
     | ConfirmRegistrationMessage
@@ -46,3 +48,4 @@ export type Message =
     | GameEndMessage
     | EnqueueMessage
     | ForfeitMessage
+    | RequestDraw

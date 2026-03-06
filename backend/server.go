@@ -144,10 +144,14 @@ func (server *Server) serverLoop() {
 			)
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
+			_,exists := server.games[gameResult.gameID]
+
+			if exists {
 			server.mu_leaderboard.Lock()
 			server.leaderboard.UpdateLeaderboard(gameResult)
 			server.mu_leaderboard.Unlock()
 			delete(server.games, gameResult.gameID)
+			}
 		default:
 			if server.readyQueue.size < 2 {
 				break

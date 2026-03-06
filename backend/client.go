@@ -70,6 +70,8 @@ func decodePayload(data []byte) (interface{}, error) {
 		return parseMessage[EnqueueRequest](data)
 	case "forfeit":
 		return parseMessage[Forfeit](data)
+	case "request_draw":
+		return parseMessage[Draw](data)
 	}
 
 	// _, is_found_game := raw["game_id"]
@@ -97,6 +99,10 @@ type FoundGame struct {
 
 type Forfeit struct {
 	Kind string `json:"type"`
+}
+
+type Draw struct {
+	Kind 	string `json:"type"`
 }
 
 func (c *Client) writeThread() {
@@ -145,8 +151,28 @@ func (c *Client) readThread() {
 				c.currentGame.handleGameEnd()
 				c.currentGame.mu.Unlock()
 			}
+		case Draw:
+			if c.currentGame.blackPlayer.username == c.username && !c.currentGame.blackWantsDraw {
+				c.currentGame.blackWantsDraw = true
+				c.currentGame.redPlayer.send <- message
+			}
+			if c.currentGame.redPlayer.username == c.username && !c.currentGame.redWantsDraw {
+				c.currentGame.redWantsDraw = true
+				c.currentGame.blackPlayer.send <- message
+			}
+			
+			if c.currentGame.redWantsDraw && c.currentGame.blackWantsDraw {
+				c.currentGame.handleGameDraw()
+			}
 		}
 	}
+}
+
+func getOpponent(game *Game, client Client) PieceColor {
+	if game.blackPlayer.username == client.username {
+		return Red
+	}
+	return Black
 }
 
 func getOpponentColor(game *Game, client Client) PieceColor {
