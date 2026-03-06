@@ -105,6 +105,20 @@ func (server *Server) serverLoop() {
 	for {
 		select {
 		case client := <-server.register:
+			var inGameAlready bool
+			for _, game := range server.games {
+				if game.redPlayer.username == client.username {
+					// client is already in a game
+					inGameAlready = true
+				}
+				if game.blackPlayer.username == client.username {
+					// client is already in a game
+					inGameAlready = true
+				}
+			}
+			if inGameAlready {
+				break
+			}
 			if client.enqueued {
 				log.Printf("Client \"%s\" is already enqueued", client.username)
 			} else {
@@ -127,6 +141,7 @@ func (server *Server) serverLoop() {
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
 			server.leaderboard.UpdateLeaderboard(gameResult)
+			delete(server.games, gameResult.gameID)
 		default:
 			if server.readyQueue.size < 2 {
 				break
