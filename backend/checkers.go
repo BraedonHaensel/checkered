@@ -32,13 +32,13 @@ const (
 )
 
 type Game struct {
-	gameID       uuid.UUID
-	redPlayer    *Client
-	blackPlayer  *Client
-	tileStates   []TileState
-	turn         PieceColor
-	previousMove *GameMove
-	resultChan   chan GameResult
+	gameID       	uuid.UUID
+	redPlayer    	*Client
+	blackPlayer  	*Client
+	tileStates   	[]TileState
+	turn         	PieceColor
+	previousMoves	[]GameMove
+	resultChan   	chan GameResult
 }
 
 func generateInitialTileStates() []TileState {
@@ -431,7 +431,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 
 		if !hasRemainingPieces(newTileStates, PieceColor(waitingPlayerColor)) {
 			game.tileStates = newTileStates
-			game.previousMove = &gameMove
+			game.previousMoves = append(game.previousMoves, gameMove)
 
 			game.handleGameEnd()
 			return true
@@ -441,7 +441,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 
 		if containsJumpMove(gameMove.To, newMoveDestinations[gameMove.To]) {
 			game.tileStates = newTileStates
-			game.previousMove = &gameMove
+			game.previousMoves = append(game.previousMoves, gameMove)
 
 			return true
 		}
@@ -449,7 +449,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 
 	if !hasLegalMoves(newTileStates, PieceColor(waitingPlayerColor)) {
 		game.tileStates = newTileStates
-		game.previousMove = &gameMove
+		game.previousMoves = append(game.previousMoves, gameMove)
 
 		game.handleGameEnd()
 		return true
@@ -457,7 +457,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 
 	game.tileStates = newTileStates
 	game.turn = PieceColor(waitingPlayerColor)
-	game.previousMove = &gameMove
+	game.previousMoves = append(game.previousMoves, gameMove)
 
 	return true
 }
@@ -468,8 +468,8 @@ func (game *Game) isValidMove(gameMove GameMove) bool {
 		color = Black
 	}
 	var prevMove *int = nil
-	if game.previousMove != nil {
-		prevMove = &game.previousMove.To
+	if len(game.previousMoves) != 0 {
+		prevMove = &game.previousMoves[len(game.previousMoves)-1].To
 	}
 	allValidMoves := getMoveDestinations(game.tileStates, PieceColor(color), prevMove)
 

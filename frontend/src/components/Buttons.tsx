@@ -32,12 +32,12 @@ export const DrawButton = ({onClick}: Props) => {
 }
 
 const colors: Record<ButtonType, string> = {
-    danger: "red-500",
-    normal: "neutral-400",
-    important: "purple-400",
+    danger: "bg-red-500",
+    normal: "bg-neutral-400",
+    important: "bg-purple-400",
 }
 
 const CustomButton = ({children, type = 'normal', onClick, hint}: {children: any, type: 'normal' | 'important' | 'danger', onClick: () => void, hint: string}) => {
-    return <button onClick={onClick} data-hint={hint} className={`relative hover:after:content-[attr(data-hint)] hover:after:absolute hover:after:bottom-[calc(100%+10px)] hover:after:left-[50%] hover:after:transform-[translateX(-50%)] hover:after:bg-neutral-400 hover:after:text-black hover:after:rounded-md hover:after:p-1 hover:after:w-max hover:after:block flex justify-center items-center ${type && "flex-grow"} bg-${colors[type]}`}>{children}</button>
+    return <button onClick={onClick} data-hint={hint} className={`relative hover:after:content-[attr(data-hint)] hover:after:absolute hover:after:bottom-[calc(100%+10px)] hover:after:left-[50%] hover:after:transform-[translateX(-50%)] hover:after:bg-neutral-400 hover:after:text-black hover:after:rounded-md hover:after:p-1 hover:after:w-max hover:after:block flex justify-center items-center ${type && "flex-grow"} ${colors[type]}`}>{children}</button>
     
 }

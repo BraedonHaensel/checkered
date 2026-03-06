@@ -25,7 +25,7 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
-        previousMove: undefined,
+        previousMoves: [],
         opponent: "Opponent",
     })
     const [gameStatus, setGameStatus] = useState<GameStatus>({
@@ -81,10 +81,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                         ...prev,
                         tileStates: newTileStates,
                         isYourTurn: false,
-                        previousMove: {
-                            sourceIndex,
-                            destIndex,
-                        },
+                        previousMoves: [...prev.previousMoves, {
+                            sourceIndex, destIndex
+                        }],
                     }
                 }
             }
@@ -104,10 +103,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     return {
                         ...prev,
                         tileStates: newTileStates,
-                        previousMove: {
-                            sourceIndex,
-                            destIndex,
-                        },
+                        previousMoves: [...prev.previousMoves, {
+                            sourceIndex, destIndex
+                        }],
                     }
                 }
             }
@@ -118,10 +116,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                     ...prev,
                     tileStates: newTileStates,
                     isYourTurn: false,
-                    previousMove: {
-                        sourceIndex,
-                        destIndex,
-                    },
+                    previousMoves: [...prev.previousMoves, {
+                        sourceIndex, destIndex
+                    }],
                 }
             }
 
@@ -130,10 +127,9 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
                 ...prev,
                 tileStates: newTileStates,
                 isYourTurn: gameState.playerColor === waitingPlayerColor,
-                previousMove: {
-                    sourceIndex,
-                    destIndex,
-                },
+                previousMoves: [...prev.previousMoves, {
+                    sourceIndex, destIndex
+                }],
             }
         })
     }
@@ -153,10 +149,10 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
         setGameState((oldState: GameState) => ({
             ...oldState,
             tileStates: message.tile_states,
-            previousMove: message.previous_move ? {
-                sourceIndex: message.previous_move.source_index,
-                destIndex: message.previous_move.destination_index,
-            } : message.previous_move,
+            previousMoves: message.previous_moves.map(move => ({
+                sourceIndex: move.source_index,
+                destIndex: move.destination_index,
+            })),
             isYourTurn: message.turn == oldState.playerColor
         }))
     })
@@ -215,13 +211,13 @@ const Game = ({ user, setPage }: { user: string, setPage: (page: Page) => void }
 
     return <div className="h-lvh grid grid-rows-[min-content_1fr] justify-center items-center pt-5">
         <h1 className='w-full text-center'>CHECKERED</h1>
-        <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[1fr_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center h-full">
-            <div className="flex flex-col items-center h-full w-full">
+        <div className="w-[100vw] grid grid-cols-[1fr] grid-rows-[auto_min-content] md:grid-cols-[2fr_1fr] md:grid-rows-[1fr] items-center md:h-full">
+            <div className="flex flex-col min-h-[80lvh] items-center h-full w-full">
                 <PlayerCard player={gameState.opponent} color={opponentColor} captured={lost} lost={captured}/>
                 <GameBoard gameState={gameState} onPieceMove={handlePieceMove} />
                 <PlayerCard player={user} color={gameState.playerColor}  captured={captured} lost={lost} />
             </div>
-            <IngameDetails statusMessage={statusMessage}>
+            <IngameDetails statusMessage={statusMessage} moves={gameState.previousMoves}>
                 <DashboardButton onClick={() => (gameStatus.state === "IN_GAME" ? alert("TODO") : setPage(Page.HOME))} exitsGame={gameStatus.state === "IN_GAME"} />
                 {gameStatus.state === "IN_GAME" && <DrawButton onClick={() => alert("TODO")} />}
             </IngameDetails>

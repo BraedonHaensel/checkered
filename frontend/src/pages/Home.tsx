@@ -12,7 +12,8 @@ const Home = ({ setPage, user }: { setPage: (page: Page) => void, user: string }
         tileStates: getNewBoardTileStates(),
         playerColor: PlayerColor.BLACK,
         isYourTurn: false,
-        previousMove: undefined,
+        previousMoves: [],
+        opponent: "Opponent",
     }
 
     return <div className="h-lvh grid grid-rows-[min-content_1fr] justify-center items-center pt-5">

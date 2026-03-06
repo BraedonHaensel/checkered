@@ -13,7 +13,8 @@ type Props = {
 const GameBoard = ({ gameState, onPieceMove }: Props) => {
     const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>()
 
-    const { tileStates, playerColor, isYourTurn, previousMove } = gameState
+    const { tileStates, playerColor, isYourTurn, previousMoves } = gameState
+    const previousMove = previousMoves[previousMoves.length - 1]
 
     useEffect(() => {
         if (previousMove !== undefined && isYourTurn) {

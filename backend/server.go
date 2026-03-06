@@ -116,12 +116,12 @@ func (server *Server) serverLoop() {
 			blackPlayer := Dequeue(&server.readyQueue)
 			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
 			gameRoom := Game{
-				gameID:       uuid.New(),
-				redPlayer:    redPlayer,
-				blackPlayer:  blackPlayer,
-				tileStates:   generateInitialTileStates(),
-				turn:         Red,
-				previousMove: nil,
+				gameID:       	uuid.New(),
+				redPlayer:    	redPlayer,
+				blackPlayer:  	blackPlayer,
+				tileStates:   	generateInitialTileStates(),
+				turn:         	Red,
+				previousMoves: 	make([]GameMove, 0),
 				resultChan:   server.gameResults,
 			}
 			server.games[gameRoom.gameID] = &gameRoom
