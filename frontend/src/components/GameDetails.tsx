@@ -1,15 +1,20 @@
+import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
 import { isJumpMove } from '../game-utils'
+
+type Props = {
+    children: any[] | any
+    statusMessage: string
+    isSearching?: boolean
+    moves?: PreviousMove[]
+}
 
 export const IngameDetails = ({
     children,
     statusMessage,
+    isSearching = false,
     moves,
-}: {
-    children: any[] | any
-    statusMessage: string
-    moves?: PreviousMove[]
-}) => {
+}: Props) => {
     const combinedMoves: string[] = []
 
     const addNewMove = (move: PreviousMove, arr: string[]) => {
@@ -46,23 +51,27 @@ export const IngameDetails = ({
                         {statusMessage}
                     </h2>
                     <hr />
-                    <div className="flrx-grow flex h-full max-h-[70vh] min-h-0 w-full flex-col items-center overflow-auto">
-                        <div className="grid w-full grid-cols-2 items-center">
-                            {moves && (
-                                <>
-                                    <b className="text-center">Black</b>
-                                    <b className="text-center">Red</b>
-                                </>
-                            )}
-                            {combinedMoves.map((move, i) => (
-                                <span
-                                    key={i}
-                                    className="block text-center text-wrap wrap-break-word"
-                                >
-                                    {move}
-                                </span>
-                            ))}
-                        </div>
+                    <div className="flex h-full max-h-[70vh] min-h-0 w-full grow flex-col items-center overflow-auto">
+                        {isSearching ? (
+                            <LoaderCircle className="my-auto h-18 w-18 animate-spin" />
+                        ) : (
+                            <div className="grid w-full grid-cols-2 items-center">
+                                {moves && (
+                                    <>
+                                        <b className="text-center">Black</b>
+                                        <b className="text-center">Red</b>
+                                    </>
+                                )}
+                                {combinedMoves.map((move, i) => (
+                                    <span
+                                        key={i}
+                                        className="block text-center text-wrap wrap-break-word"
+                                    >
+                                        {move}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex flex-row flex-wrap justify-between gap-2 p-2">
