@@ -96,7 +96,7 @@ type FoundGame struct {
 }
 
 type Forfeit struct {
-	Kind 	string `json:"type"`
+	Kind string `json:"type"`
 }
 
 func (c *Client) writeThread() {
@@ -140,8 +140,10 @@ func (c *Client) readThread() {
 			c.handleFoundGame(p)
 		case Forfeit:
 			if c.currentGame != nil {
-				c.currentGame.turn = getOpponentColor(*c.currentGame, *c)
+				c.currentGame.mu.Lock()
+				c.currentGame.turn = getOpponentColor(c.currentGame, *c)
 				c.currentGame.handleGameEnd()
+				c.currentGame.mu.Unlock()
 			}
 		}
 	}
@@ -187,7 +189,7 @@ type EnqueueRequest struct {
 
 func (c *Client) handleNewMove(p GameMove) {
 	c.currentGame.mu.Lock()
-	c.currentGame.mu.Unlock()
+	defer c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)
 
 	newState := GameStateUpdate{
