@@ -150,13 +150,6 @@ func (server *Server) serverLoop() {
 func main() {
 	flag.Parse()
 	server := InitServer()
-	server.leaderboard.AddPlayerToLeaderboard("akeuben")
-	server.leaderboard.AddPlayerToLeaderboard("test")
-	server.leaderboard.UpdateLeaderboard(GameResult{
-		gameID: uuid.New(),
-		winner: "akeuben",
-		loser:  "test",
-	})
 	go server.serverLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(server, w, r)
