@@ -124,11 +124,7 @@ export class Backend {
         })
 
         ws.addEventListener('open', () => {
-            session.connect(ws)
-            session.send({
-                type: 'join',
-                user: user,
-            })
+            session.connect(ws, user)
         })
     }
 
