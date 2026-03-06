@@ -527,10 +527,11 @@ func (game *Game) handleGameEnd() {
 	game.resultChan <- gameResult
 }
 
-func (game *Game) messageFromNewGame(playerKind string) FoundGame {
+func (game *Game) messageFromNewGame(playerKind string, opponent string) FoundGame {
 	return FoundGame{
 		Kind: "start",
 		Side: playerKind,
+		Opponent: opponent,
 	}
 }
 

@@ -15,4 +15,5 @@ export interface GameState {
     playerColor: PlayerColor
     isYourTurn: boolean
     previousMove: PreviousMove | undefined
+    opponent: string
 }

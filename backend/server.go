@@ -126,8 +126,8 @@ func (server *Server) serverLoop() {
 			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
-			redMessage := gameRoom.messageFromNewGame("red")
-			blackMessage := gameRoom.messageFromNewGame("black")
+			redMessage := gameRoom.messageFromNewGame("red", blackPlayer.username)
+			blackMessage := gameRoom.messageFromNewGame("black", redPlayer.username)
 			redBytes, err := json.Marshal(redMessage)
 			if err != nil {
 				log.Println(err)

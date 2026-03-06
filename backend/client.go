@@ -62,8 +62,9 @@ func decodePayload(data []byte) (interface{}, error) {
 
 // message that is sent to the client when a game has been found
 type FoundGame struct {
-	Kind string `json:"type"`
-	Side string `json:"player_color"`
+	Kind 		string `json:"type"`
+	Side 		string `json:"player_color"`
+	Opponent 	string `json:"opponent"`
 }
 
 func (c *Client) writeThread() {

@@ -10,6 +10,7 @@ export interface JoinMessage extends GenericMessage<'join'> {
 
 export interface StartMessage extends GenericMessage<'start'> {
     player_color: PlayerColor
+    opponent: string
 }
 
 export interface MoveMessage extends GenericMessage<'move'> {
