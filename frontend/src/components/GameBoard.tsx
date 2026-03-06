@@ -153,7 +153,7 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     ])
 
     return (
-        <div className="flex h-full w-full items-center justify-center pr-5 pl-5 md:pr-0">
+        <div className="flex h-full w-full items-center justify-center pr-5 pl-5 lg:pr-0">
             <div className="flex aspect-square h-full max-w-full items-center justify-center">
                 <div className="flex aspect-square w-full items-center justify-center">
                     <div

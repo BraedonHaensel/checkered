@@ -18,7 +18,7 @@ export const PlayerCard = ({
 }) => {
     const advantage = captured - lost
     return (
-        <div className="w-full p-5 md:pr-0">
+        <div className="w-full p-5 lg:pr-0">
             <div className="box-border flex w-full gap-3 rounded-lg bg-neutral-900 p-3">
                 <div
                     className={`flex aspect-square w-15 items-center justify-center rounded-xl border-5 bg-white ${turn ? 'border-yellow-500' : ''}`}

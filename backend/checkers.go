@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -41,6 +42,7 @@ type Game struct {
 	resultChan   	chan GameResult
 	blackWantsDraw	bool
 	redWantsDraw	bool
+	mu            sync.Mutex
 }
 
 func generateInitialTileStates() []TileState {
@@ -554,8 +556,8 @@ func (game *Game) handleGameDraw() {
 
 func (game *Game) messageFromNewGame(playerKind string, opponent string) FoundGame {
 	return FoundGame{
-		Kind: "start",
-		Side: playerKind,
+		Kind:     "start",
+		Side:     playerKind,
 		Opponent: opponent,
 	}
 }

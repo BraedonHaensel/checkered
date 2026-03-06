@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,9 +25,10 @@ type Server struct {
 	// we map username to client
 	clients map[string]*Client
 	// games that new clients are in
-	games       map[uuid.UUID]*Game
-	readyQueue  Queue[*Client]
-	leaderboard *Leaderboard
+	games          map[uuid.UUID]*Game
+	readyQueue     Queue[*Client]
+	leaderboard    *Leaderboard
+	mu_leaderboard sync.Mutex
 
 	register     chan *Client
 	unregister   chan *Client
@@ -38,12 +40,13 @@ var addr = flag.String("addr", ":8080", "http service address")
 
 func InitServer() *Server {
 	server := Server{
-		clients:     make(map[string]*Client),
-		games:       make(map[uuid.UUID]*Game),
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
-		leaderboard: &Leaderboard{},
-		gameResults: make(chan GameResult, 10),
+		clients:        make(map[string]*Client),
+		games:          make(map[uuid.UUID]*Game),
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
+		leaderboard:    &Leaderboard{},
+		mu_leaderboard: sync.Mutex{},
+		gameResults:    make(chan GameResult, 10),
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
@@ -144,8 +147,10 @@ func (server *Server) serverLoop() {
 			_,exists := server.games[gameResult.gameID]
 
 			if exists {
-				server.leaderboard.UpdateLeaderboard(gameResult)
-				delete(server.games, gameResult.gameID)
+			server.mu_leaderboard.Lock()
+			server.leaderboard.UpdateLeaderboard(gameResult)
+			server.mu_leaderboard.Unlock()
+			delete(server.games, gameResult.gameID)
 			}
 		default:
 			if server.readyQueue.size < 2 {
@@ -164,6 +169,7 @@ func (server *Server) serverLoop() {
 				turn:          Red,
 				previousMoves: make([]GameMove, 0),
 				resultChan:    server.gameResults,
+				mu:            sync.Mutex{},
 			}
 			server.games[gameRoom.gameID] = &gameRoom
 			// tell both servers about the new game
@@ -196,7 +202,9 @@ func main() {
 		serveWs(server, w, r)
 	})
 	http.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		server.mu_leaderboard.Lock()
 		server.getLeaderboard(w, r)
+		server.mu_leaderboard.Unlock()
 	})
 	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
