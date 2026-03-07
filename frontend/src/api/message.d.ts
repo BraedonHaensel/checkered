@@ -8,14 +8,14 @@ export interface JoinMessage extends GenericMessage<'join'> {
     user: string
 }
 
-export interface ConfirmRegistrationMessage extends GenericMessage<'registered'> {}
+export type ConfirmRegistrationMessage = GenericMessage<'registered'>
 
 export interface StartMessage extends GenericMessage<'start'> {
     player_color: PlayerColor
     opponent: string
 }
 
-export interface EnqueueMessage extends GenericMessage<'enqueue'> {}
+export type EnqueueMessage = GenericMessage<'enqueue'>
 
 export interface MoveMessage extends GenericMessage<'move'> {
     source_index: number
@@ -35,9 +35,9 @@ export interface GameEndMessage extends GenericMessage<'game_end'> {
     winner: PlayerColor | 'draw'
 }
 
-export interface ForfeitMessage extends GenericMessage<'forfeit'> {}
+export type ForfeitMessage = GenericMessage<'forfeit'>
 
-export interface RequestDraw extends GenericMessage<'request_draw'> {}
+export type RequestDraw = GenericMessage<'request_draw'>
 
 export type Message =
     | JoinMessage

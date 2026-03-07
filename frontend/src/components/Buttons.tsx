@@ -1,4 +1,5 @@
 import { Flag, Handshake, Home, PlusCircle, Trophy } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 type Props = {
     onClick: () => void
@@ -38,9 +39,16 @@ export const DashboardButton = ({
     )
 }
 
-export const DrawButton = ({ onClick, requested}: Props & {requested: boolean}) => {
+export const DrawButton = ({
+    onClick,
+    requested,
+}: Props & { requested: boolean }) => {
     return (
-        <CustomButton onClick={onClick} type={requested ? 'accept' : 'normal'} hint="Request Draw">
+        <CustomButton
+            onClick={onClick}
+            type={requested ? 'accept' : 'normal'}
+            hint="Request Draw"
+        >
             <Handshake />
         </CustomButton>
     )
@@ -59,7 +67,7 @@ const CustomButton = ({
     onClick,
     hint,
 }: {
-    children: any
+    children: ReactNode
     type: ButtonType
     onClick: () => void
     hint: string

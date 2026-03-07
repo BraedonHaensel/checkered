@@ -4,7 +4,7 @@ import { getLeaderboard } from '../api/api'
 import { LeaderboardTable } from '../components/Leaderboard'
 import { Page } from '../enums'
 import { DashboardButton } from '../components/Buttons'
-import { IngameDetails } from '../components/GameDetails'
+import { GameDetails } from '../components/GameDetails'
 
 const Leaderboard = ({
     setPage,
@@ -36,12 +36,12 @@ const Leaderboard = ({
                         </>
                     )}
                 </div>
-                <IngameDetails statusMessage={`Welcome, ${user}`}>
+                <GameDetails statusMessage={`Welcome, ${user}`}>
                     <DashboardButton
                         onClick={() => setPage(Page.HOME)}
                         exitsGame={false}
                     />
-                </IngameDetails>
+                </GameDetails>
             </div>
         </div>
     )

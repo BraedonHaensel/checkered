@@ -34,7 +34,7 @@ export class Backend {
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
         const url = `${this.server().apiUrl}/${type}`
-        let raw: globalThis.Response = undefined as any
+        let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
                 body:
@@ -46,7 +46,7 @@ export class Backend {
                 },
                 method: 'GET',
             })
-        } catch (e) {
+        } catch {
             this.handleServerError()
             return this.get(type, payload)
         }
@@ -59,7 +59,7 @@ export class Backend {
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
         const url = `${this.server().apiUrl}/${type}`
-        let raw: globalThis.Response = undefined as any
+        let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
                 body:
@@ -71,7 +71,7 @@ export class Backend {
                 },
                 method: 'POST',
             })
-        } catch (e) {
+        } catch {
             this.handleServerError()
             return this.post(type, payload)
         }
