@@ -184,9 +184,11 @@ func getOpponentColor(game *Game, client Client) PieceColor {
 
 func (c *Client) handleDisconnect() {
 	log.Printf("User %s disconnected", c.username)
-	c.currentGame.mu.Lock()
-	defer c.currentGame.mu.Unlock()
+
 	if c.currentGame != nil {
+		c.currentGame.mu.Lock()
+		defer c.currentGame.mu.Unlock()
+
 		c.currentGame.turn = getOpponentColor(c.currentGame, *c)
 		c.currentGame.handleGameEnd()
 	}
