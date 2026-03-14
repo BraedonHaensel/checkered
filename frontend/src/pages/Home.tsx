@@ -1,5 +1,5 @@
 import GameBoard from '../components/GameBoard'
-import { IngameDetails } from '../components/GameDetails'
+import { GameDetails } from '../components/GameDetails'
 import { PlayerCard } from '../components/PlayerCard'
 import { LeaderboardButton, SearchButton } from '../components/Buttons'
 import { Page, PlayerColor } from '../enums'
@@ -20,12 +20,13 @@ const Home = ({
         isYourTurn: false,
         previousMoves: [],
         opponent: 'Opponent',
+        draw_requested: false,
     }
 
     return (
         <div className="grid h-lvh grid-rows-[min-content_1fr] items-center justify-center pt-5">
             <h1 className="w-full text-center">CHECKERED</h1>
-            <div className="grid w-[100vw] grid-cols-[1fr] grid-rows-[auto_min-content] items-center lg:h-full lg:grid-cols-[2fr_1fr] lg:grid-rows-[1fr]">
+            <div className="grid w-screen grid-cols-[1fr] grid-rows-[auto_min-content] items-center lg:h-full lg:grid-cols-[2fr_1fr] lg:grid-rows-[1fr]">
                 <div className="flex h-full min-h-[67lvh] w-full flex-col items-center">
                     <PlayerCard
                         player="Opponent"
@@ -43,12 +44,12 @@ const Home = ({
                         turn={false}
                     />
                 </div>
-                <IngameDetails statusMessage={`Welcome, ${user}`}>
+                <GameDetails statusMessage={`Welcome, ${user}`}>
                     <SearchButton onClick={() => setPage(Page.GAME)} />
                     <LeaderboardButton
                         onClick={() => setPage(Page.LEADERBOARD)}
                     />
-                </IngameDetails>
+                </GameDetails>
             </div>
         </div>
     )

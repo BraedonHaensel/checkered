@@ -15,7 +15,7 @@ export class Session {
 
     public constructor() {}
 
-    private onmessage(event: MessageEvent<any>) {
+    private onmessage(event: MessageEvent) {
         const data = JSON.parse(event.data) as Message
 
         const type = data.type
@@ -34,7 +34,7 @@ export class Session {
 
     public connect(ws: WebSocket, user: string) {
         this.ws = ws
-        this.ws.addEventListener('message', (event: MessageEvent<any>) => {
+        this.ws.addEventListener('message', (event: MessageEvent) => {
             this.onmessage(event)
         })
         this.ws.send(
@@ -87,7 +87,7 @@ export const useSession = (
                 sessionRef.current = null
             }
         }
-    }, [])
+    }, [onCreate])
 
     return sessionRef.current!
 }

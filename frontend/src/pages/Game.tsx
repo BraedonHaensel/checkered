@@ -17,7 +17,7 @@ import {
 import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
-import { IngameDetails } from '../components/GameDetails'
+import { GameDetails } from '../components/GameDetails'
 import {
     DashboardButton,
     DrawButton,
@@ -322,7 +322,7 @@ const Game = ({
                         }
                     />
                 </div>
-                <IngameDetails
+                <GameDetails
                     statusMessage={statusMessage}
                     isSearching={gameStatus.state === 'SEARCHING'}
                     moves={
@@ -348,7 +348,7 @@ const Game = ({
                     {gameStatus.state === 'FINISHED' && (
                         <SearchButton onClick={resetState} />
                     )}
-                </IngameDetails>
+                </GameDetails>
             </div>
         </div>
     )

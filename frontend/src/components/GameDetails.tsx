@@ -1,15 +1,16 @@
 import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
 import { isJumpMove } from '../game-utils'
+import type { ReactNode } from 'react'
 
 type Props = {
-    children: any[] | any
+    children: ReactNode
     statusMessage: string
     isSearching?: boolean
     moves?: PreviousMove[]
 }
 
-export const IngameDetails = ({
+export const GameDetails = ({
     children,
     statusMessage,
     isSearching = false,
