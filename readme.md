@@ -26,3 +26,6 @@ cd name-server && go run .
 ```
 
 Use the `-addr` flag to change the Name Server's address/port.
+
+Edit `game-servers.txt` and `matchmaking-servers.txt` to change the list of
+active servers.

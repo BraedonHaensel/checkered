@@ -22,8 +22,8 @@ func logAddress() {
 			log.Fatal(err)
 		}
 		defer conn.Close()
-		localAddress := conn.LocalAddr().(*net.UDPAddr)
 
+		localAddress := conn.LocalAddr().(*net.UDPAddr)
 		log.Printf("Name Server running on %s%s\n", localAddress.IP, *addr)
 	} else {
 		log.Println("Name Server running on", *addr)
