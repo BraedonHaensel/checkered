@@ -25,4 +25,4 @@ Run the Name Server using the following:
 cd name-server && go run .
 ```
 
-Use the `-addr` flag to change the servers address/port.
+Use the `-addr` flag to change the Name Server's address/port.
