@@ -15,7 +15,7 @@ export const ColumnLabels = ({ reverse = false, className = '' }: Props) => {
     return (
         <div className={cn('grid grid-cols-8', className)}>
             {letters.map((letter) => (
-                <span className="m-auto text-xl">{letter}</span>
+                <span className="m-auto mb-0 text-xl">{letter}</span>
             ))}
         </div>
     )

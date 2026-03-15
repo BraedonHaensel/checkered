@@ -158,7 +158,7 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     return (
         <div className="flex aspect-square h-full">
             <RowLabels
-                className="w-10 pb-10"
+                className="w-5 pb-6"
                 reverse={playerColor === PlayerColor.RED}
             />
 
@@ -172,7 +172,7 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
                     {tiles}
                 </div>
                 <ColumnLabels
-                    className="h-10"
+                    className="h-6"
                     reverse={playerColor === PlayerColor.RED}
                 />
             </div>

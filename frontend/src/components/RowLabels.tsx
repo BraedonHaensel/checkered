@@ -13,7 +13,7 @@ export const RowLabels = ({ reverse = false, className = '' }: Props) => {
     return (
         <div className={cn('grid grid-rows-8', className)}>
             {numbers.map((number) => (
-                <span className="m-auto text-xl">{number}</span>
+                <span className="m-auto ml-0 text-xl">{number}</span>
             ))}
         </div>
     )
