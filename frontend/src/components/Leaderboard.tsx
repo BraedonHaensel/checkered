@@ -6,10 +6,10 @@ export const LeaderboardTable = ({
     leaderboard: GetLeaderboardResponse
 }) => {
     return (
-        <table className="w-full min-w-max table-auto text-left">
+        <table className="text-left">
             <thead>
                 <tr className="border-b">
-                    <th>Username</th>
+                    <th className="w-1/3">Username</th>
                     <th>Wins</th>
                     <th>Losses</th>
                 </tr>

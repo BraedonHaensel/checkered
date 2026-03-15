@@ -45,7 +45,7 @@ export const GameDetails = ({
     }
 
     return (
-        <div className="h-full w-full p-5">
+        <div className="h-full w-full">
             <div className="grid h-full w-full grid-rows-[1fr_min-content] rounded-lg bg-neutral-900">
                 <div className="flex h-full flex-col gap-5 p-2">
                     <h2 className="w-full text-center text-xl">
