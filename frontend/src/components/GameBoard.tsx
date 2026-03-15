@@ -5,6 +5,7 @@ import { getMoveDestinations, isBlackPiece } from '../game-utils'
 import type { GameState } from '../game-state'
 import { ColumnLabels } from './ColumnLabels'
 import { RowLabels } from './RowLabels'
+import { cn } from '../lib/utils'
 
 type Props = {
     gameState: GameState
@@ -163,7 +164,10 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
 
             <div className="flex h-full w-full flex-col">
                 <div
-                    className={`grid h-full w-full ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 overflow-hidden rounded-xl`}
+                    className={cn(
+                        'grid h-full w-full grid-cols-8 grid-rows-8 overflow-hidden rounded-xl',
+                        playerColor === PlayerColor.RED && 'rotate-180'
+                    )}
                 >
                     {tiles}
                 </div>

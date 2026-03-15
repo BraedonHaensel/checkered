@@ -1,3 +1,4 @@
+import { cn } from '../lib/utils'
 import style from './Piece.module.css'
 import React from 'react'
 
@@ -18,11 +19,16 @@ const Piece = React.memo(
     }: Props) => {
         return (
             <div
-                className={
-                    `flex h-3/4 w-3/4 items-center justify-center rounded-full ` +
-                    `${isBlack ? 'bg-black' : 'bg-red-500'} ` +
-                    `${style.piece} ${isBlack ? style.black : style.red} ${isKing ? style.king : ''} ${showSelectedHighlight ? style.selected : showSelectableHighlight ? style.movable : ''}`
-                }
+                className={cn(
+                    'flex h-3/4 w-3/4 items-center justify-center rounded-full',
+                    isBlack ? 'bg-black' : 'bg-red-500',
+                    style.piece,
+                    isBlack ? style.black : style.red,
+                    isKing && style.king,
+                    showSelectedHighlight
+                        ? style.selected
+                        : showSelectableHighlight && style.movable
+                )}
             />
         )
     }

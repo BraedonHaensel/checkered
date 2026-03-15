@@ -1,4 +1,5 @@
 import { PlayerColor } from '../enums'
+import { cn } from '../lib/utils'
 import Piece from './Piece'
 
 import style from './Piece.module.css'
@@ -21,7 +22,10 @@ export const PlayerCard = ({
         <div className="w-full p-5 lg:pr-0">
             <div className="box-border flex w-full gap-3 rounded-lg bg-neutral-900 p-3">
                 <div
-                    className={`flex aspect-square w-15 items-center justify-center rounded-xl border-5 bg-white ${turn ? 'border-yellow-500' : ''}`}
+                    className={cn(
+                        'flex aspect-square w-15 items-center justify-center rounded-xl border-5 bg-white',
+                        turn && 'border-yellow-500'
+                    )}
                 >
                     <Piece
                         isBlack={color === PlayerColor.BLACK}
@@ -46,7 +50,13 @@ export const PlayerCard = ({
                             {new Array(captured).fill(0).map(() => (
                                 <div className="h-4 w-4">
                                     <div
-                                        className={`h-full w-full rounded-[100vw] ${style.piece} ${color === PlayerColor.BLACK ? style.red + ' bg-red-500' : style.white + ' bg-white'}`}
+                                        className={cn(
+                                            'h-full w-full rounded-[100vw]',
+                                            style.piece,
+                                            color === PlayerColor.BLACK
+                                                ? cn(style.red, 'bg-red-500')
+                                                : cn(style.white, 'bg-white')
+                                        )}
                                     />
                                 </div>
                             ))}
