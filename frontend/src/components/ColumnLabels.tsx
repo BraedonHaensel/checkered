@@ -1,18 +1,21 @@
+import { cn } from '../lib/utils'
+
 type Props = {
     reverse?: boolean
+    className?: string
 }
 
 // Labels for displaying the column numbers
-export const ColumnLabels = ({ reverse = false }: Props) => {
+export const ColumnLabels = ({ reverse = false, className = '' }: Props) => {
     let letters = Array.from({ length: 8 }).map((_, i: number) =>
         String.fromCharCode(65 + i)
     )
     if (reverse) letters = letters.reverse()
 
     return (
-        <div className="grid w-full grid-cols-8 py-2">
+        <div className={cn('grid grid-cols-8', className)}>
             {letters.map((letter) => (
-                <span className="text-center text-xl">{letter}</span>
+                <span className="m-auto text-xl">{letter}</span>
             ))}
         </div>
     )
