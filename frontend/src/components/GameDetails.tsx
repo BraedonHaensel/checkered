@@ -1,6 +1,6 @@
 import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
-import { isJumpMove } from '../game-utils'
+import { isJumpMove, tileIndexToCol, tileIndexToRow } from '../game-utils'
 import type { ReactNode } from 'react'
 
 type Props = {
@@ -16,30 +16,43 @@ export const GameDetails = ({
     isSearching = false,
     moves,
 }: Props) => {
-    const combinedMoves: string[] = []
+    const moveNotations: string[] = []
 
-    const addNewMove = (move: PreviousMove, arr: string[]) => {
-        const isJump = isJumpMove(move.sourceIndex, move.destIndex)
-        const seperator = isJump ? 'x' : '-'
+    // Gets the column letter and row number coordinates for a tile index
+    const tileIndexToCoordinate = (tileIndex: number): string => {
+        const rowNum = 8 - tileIndexToRow(tileIndex)
+        const colIndex = tileIndexToCol(tileIndex)
+        const colLetter = String.fromCharCode(65 + colIndex)
 
-        arr.push(`${move.sourceIndex}${seperator}${move.destIndex}`)
+        return `${colLetter}${rowNum}`
     }
 
-    const appendFollowupMove = (move: PreviousMove, arr: string[]) => {
+    // Gets the coordiante notation for a move
+    const moveToCoordinateNotation = (move: PreviousMove) => {
         const isJump = isJumpMove(move.sourceIndex, move.destIndex)
         const seperator = isJump ? 'x' : '-'
-        arr[arr.length - 1] =
-            `${arr[arr.length - 1]}${seperator}${move.destIndex}`
+
+        const sourceCoord = tileIndexToCoordinate(move.sourceIndex)
+        const destCoord = tileIndexToCoordinate(move.destIndex)
+
+        return `${sourceCoord}${seperator}${destCoord}`
+    }
+
+    // Append an extra jump to the previous move notation for multijumps
+    const appendMultiJumpMove = (destIndex: number) => {
+        const destCoord = tileIndexToCoordinate(destIndex)
+        moveNotations[moveNotations.length - 1] =
+            `${moveNotations[moveNotations.length - 1]}x${destCoord}`
     }
 
     if (moves && moves.length > 0) {
-        addNewMove(moves[0], combinedMoves)
+        moveNotations.push(moveToCoordinateNotation(moves[0]))
 
         for (let i = 1; i < moves.length; i++) {
             if (moves[i].sourceIndex === moves[i - 1].destIndex) {
-                appendFollowupMove(moves[i], combinedMoves)
+                appendMultiJumpMove(moves[i].destIndex)
             } else {
-                addNewMove(moves[i], combinedMoves)
+                moveNotations.push(moveToCoordinateNotation(moves[i]))
             }
         }
     }
@@ -63,7 +76,7 @@ export const GameDetails = ({
                                         <b className="text-center">Red</b>
                                     </>
                                 )}
-                                {combinedMoves.map((move, i) => (
+                                {moveNotations.map((move, i) => (
                                     <span
                                         key={i}
                                         className="block text-center text-wrap wrap-break-word"
