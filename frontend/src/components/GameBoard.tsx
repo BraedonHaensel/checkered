@@ -3,6 +3,7 @@ import Tile from './Tile'
 import { PlayerColor } from '../enums'
 import { getMoveDestinations, isBlackPiece } from '../game-utils'
 import type { GameState } from '../game-state'
+import { ColumnLabels } from './ColumnLabels'
 
 type Props = {
     gameState: GameState
@@ -155,12 +156,13 @@ const GameBoard = ({ gameState, onPieceMove }: Props) => {
     return (
         <div className="flex h-full w-full items-center justify-center pr-5 pl-5 lg:pr-0">
             <div className="flex aspect-square h-full max-w-full items-center justify-center">
-                <div className="flex aspect-square w-full items-center justify-center">
+                <div className="flex aspect-square w-full flex-col items-center justify-center">
                     <div
                         className={`grid h-full w-full ${playerColor === PlayerColor.RED && 'rotate-180'} grid-cols-8 grid-rows-8 overflow-hidden rounded-xl`}
                     >
                         {tiles}
                     </div>
+                    <ColumnLabels reverse={playerColor === PlayerColor.RED} />
                 </div>
             </div>
         </div>
