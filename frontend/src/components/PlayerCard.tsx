@@ -45,8 +45,8 @@ export const PlayerCard = ({
                     </i>
                 </p>
                 <div className="flex h-full w-full items-center gap-3 overflow-x-auto px-1">
-                    {new Array(captured).fill(0).map(() => (
-                        <div>
+                    {new Array(captured).fill(0).map((i) => (
+                        <div key={i}>
                             <div
                                 className={cn(
                                     'h-4 w-4 rounded-full',
