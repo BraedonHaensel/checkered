@@ -28,7 +28,7 @@ func main() {
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
-	log.Printf("Matchmaker Listening for requests")
+	Checkered.LogAddress(*addr, "Matchmaker")
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

@@ -17,6 +17,7 @@ func main() {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		Checkered.ServeWs(server, w, r)
 	})
+	Checkered.LogAddress(*addr, "Game Server")
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

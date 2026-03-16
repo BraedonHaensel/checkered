@@ -101,7 +101,6 @@ func ServeWs(server *Server, w http.ResponseWriter, r *http.Request) {
 // main idea of this loop is to register new active users and put them
 // into the server struct
 func (server *Server) ServerLoop() {
-	log.Println("Server Running...")
 	for {
 		select {
 		case client := <-server.register:
