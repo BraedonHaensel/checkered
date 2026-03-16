@@ -120,12 +120,13 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	address := data.Address
 	log.Println("POST /register/game-server -", address)
 
-	// Add the server address to the list of active servers
+	// If new, add the server address to the list of active servers
 	if !slices.Contains(gameServerAddresses, address) {
 		gameServerAddresses = append(gameServerAddresses, address)
 	}
 
-	// Send a response to the client
+	// Send a success response to the client (regardless of whether the server
+	// was already registered with the Name Server)
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte("Game Server added successfully."))
 }
