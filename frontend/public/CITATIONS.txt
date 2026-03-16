@@ -1,0 +1,10 @@
+CITATIONS
+=========
+This file contains all the citations for the extra resources used by this group to produce the frontend. 
+
+----------
+Login Background Image (login_background.png) 
+
+- This was an AI generated image used as the background image to our login page. This is not sourced from any third party
+- Created using open ai - GPT-5.4
+
