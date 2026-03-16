@@ -1,7 +1,7 @@
 
 matchmaker:
-	go run -race cmd/matchmaker/main.go
+	go run cmd/matchmaker/main.go
 
 game-server:
-	go run -race cmd/game-server/main.go
+	go run cmd/game-server/main.go
 
