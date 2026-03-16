@@ -13,7 +13,7 @@ var addr = flag.String("addr", ":4000", "http service address")
 func main() {
 	flag.Parse()
 	matchmaker := Checkered.NewMatchmaker()
-	http.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
 	})
 
