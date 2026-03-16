@@ -1,6 +1,6 @@
 CITATIONS
 =========
-This file contains all the citations for the extra resources used by this group to produce the frontend. 
+This file contains the citations for the contents of this directory.
 
 ----------
 Login Background Image (login_background.png) 
