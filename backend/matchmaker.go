@@ -7,11 +7,8 @@ import (
 	"sync"
 )
 
-// Responsible for handling
-// the queue for new players
-// finding a game, as well as
-// maintaining the leaderboard
-// and handling all leaderboard requests
+// Responsible for handling the queue for new players finding a game, as well as
+// maintaining the leaderboard and handling all leaderboard requests
 type Matchmaker struct {
 	mu_leaderboard sync.Mutex
 	leaderboard    Leaderboard
@@ -43,9 +40,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// Handler for a request for a users status on the queue
-// will respond with still in the queue or will respond with
-// a new found match
+// Handler for a request for a users status on the queue will respond with still
+// in the queue or will respond with a new found match
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 }
