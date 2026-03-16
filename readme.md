@@ -14,7 +14,11 @@ npm run dev
 ```
 
 ## Backend 
-Run the backend using the following:
+To run a matchmaker server
 ```sh
-cd backend && go run .
+cd backend && make matchmaker
+```
+To run a game server
+```sh
+cd backend && make game-server
 ```
