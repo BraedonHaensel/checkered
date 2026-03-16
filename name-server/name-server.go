@@ -9,15 +9,22 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
+	"slices"
 	"strings"
 )
 
+// Name Server address flag
+var addr = flag.String("addr", ":9000", "http service address")
+
+
+// Lists of active server addresses
+var matchmakerAddresses = []string{}
+var gameServerAddresses = []string{}
+
+// Request format for Matchmaker or Game Server registration
 type registerServerRequest struct {
 	Address string `json:"address"`
 }
-
-var addr = flag.String("addr", ":9000", "http service address")
 
 // Log the address the server is running on
 func logAddress() {
@@ -35,21 +42,6 @@ func logAddress() {
 	} else {
 		log.Println("Name Server running on", *addr)
 	}
-}
-
-// Opens a file and returns a list of its lines
-func readFileLines(name string) []string {
-	contents, err := os.ReadFile(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	lines := []string{}
-	for line := range strings.Lines(string(contents)) {
-		trimmedLine := strings.TrimSpace(line)
-		lines = append(lines, trimmedLine)
-	}
-	return lines
 }
 
 // Parses JSON data from a request. Returns an error and HTTP status code if the
@@ -75,9 +67,7 @@ func pasreJsonRequestData[T any](req *http.Request) (T, error, int) {
 
 // GET /matchmakers - Get the list of known Matchmaker servers
 func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
-	servers := readFileLines("./matchmaking-servers.txt")
-
-	jsonData, err := json.Marshal(servers)
+	jsonData, err := json.Marshal(matchmakerAddresses)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -88,9 +78,7 @@ func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
 
 // GET /game-servers - Get the list of known Game Servers
 func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
-	servers := readFileLines("./game-servers.txt")
-
-	jsonData, err := json.Marshal(servers)
+	jsonData, err := json.Marshal(gameServerAddresses)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -102,30 +90,44 @@ func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
 // POST /register/matchmaker - Handle registering a Matchmaker server.
 // Name Server
 func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
+	// Parse the server address to register
 	data, err, errStatus := pasreJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	log.Println("POST /register/matchmaker -", data.Address)
+	address := data.Address
+	log.Println("POST /register/matchmaker -", address)
 
-	// Send response to client
+	// Add the server address to the list of active servers
+	if !slices.Contains(matchmakerAddresses, address) {
+		matchmakerAddresses = append(matchmakerAddresses, address)
+	}
+
+	// Send a response to the client
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte("Matchmaker added successfully."))
 }
 
 // POST /register/game-server Handle registering a Game Server.
 func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
+	// Parse the server address to register
 	data, err, errStatus := pasreJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	log.Println("POST /register/game-server -", data.Address)
+	address := data.Address
+	log.Println("POST /register/game-server -", address)
 
-	// Send response to client
+	// Add the server address to the list of active servers
+	if !slices.Contains(gameServerAddresses, address) {
+		gameServerAddresses = append(gameServerAddresses, address)
+	}
+
+	// Send a response to the client
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Matchmaker added successfully."))
+	w.Write([]byte("Game Server added successfully."))
 }
 
 // Run the Name Server
