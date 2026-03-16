@@ -16,7 +16,6 @@ import (
 // Name Server address flag
 var addr = flag.String("addr", ":9000", "http service address")
 
-
 // Lists of active server addresses
 var matchmakerAddresses = []string{}
 var gameServerAddresses = []string{}
@@ -26,11 +25,11 @@ type registerServerRequest struct {
 	Address string `json:"address"`
 }
 
-// Log the address the server is running on
-func logAddress() {
-	if strings.HasPrefix(*addr, ":") {
+// Gets the fully qualified URL for the Name Server address
+func getFullUrl(addr string) string {
+	if strings.HasPrefix(addr, ":") {
 		// Port provided, so determine the local IP address
-		// source: https://gosamples.dev/local-ip-address/
+		// Source: https://gosamples.dev/local-ip-address/
 		conn, err := net.Dial("udp", "8.8.8.8:80")
 		if err != nil {
 			log.Fatal(err)
@@ -38,16 +37,17 @@ func logAddress() {
 		defer conn.Close()
 
 		localAddress := conn.LocalAddr().(*net.UDPAddr)
-		log.Printf("Name Server running on %s%s\n", localAddress.IP, *addr)
+		return "http://" + localAddress.IP.String() + addr
 	} else {
-		log.Println("Name Server running on", *addr)
+		// Add "http://" to the address
+		return "http://" + addr
 	}
 }
 
 // Parses JSON data from a request. Returns an error and HTTP status code if the
 // parsing fails.
-func pasreJsonRequestData[T any](req *http.Request) (T, error, int) {
-	var data T;
+func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
+	var data T
 	// Parse the request body
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -91,7 +91,7 @@ func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
 // Name Server
 func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	// Parse the server address to register
-	data, err, errStatus := pasreJsonRequestData[registerServerRequest](req)
+	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -112,7 +112,7 @@ func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 // POST /register/game-server Handle registering a Game Server.
 func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	// Parse the server address to register
-	data, err, errStatus := pasreJsonRequestData[registerServerRequest](req)
+	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -133,7 +133,6 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 // Run the Name Server
 func main() {
 	flag.Parse()
-	logAddress()
 
 	// Request handlers
 	http.HandleFunc("/matchmakers", handleGetMatchmakers)
@@ -141,6 +140,8 @@ func main() {
 	http.HandleFunc("POST /register/matchmaker", handleRegisterMatchmaker)
 	http.HandleFunc("POST /register/game-server", handleRegisterGameServer)
 
+	url := getFullUrl(*addr)
+	log.Println("Game Server running on", url)
 	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

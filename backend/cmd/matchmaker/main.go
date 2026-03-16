@@ -9,6 +9,7 @@ import (
 )
 
 var addr = flag.String("addr", ":4000", "http service address")
+var nameServerUrl = flag.String("ns", "http://localhost:9000", "full Name Server URL")
 
 func main() {
 	flag.Parse()
@@ -28,7 +29,12 @@ func main() {
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
-	Checkered.LogAddress(*addr, "Matchmaker")
+
+	// Register with the Name Server
+	url := Checkered.GetFullUrl(*addr)
+	Checkered.SendRegistrationRequest(url, *nameServerUrl+"/register/matchmaker")
+
+	log.Println("Matchmaker running on", url)
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
