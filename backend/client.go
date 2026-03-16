@@ -1,4 +1,4 @@
-package main
+package checkered
 
 import (
 	"encoding/json"
@@ -102,7 +102,7 @@ type Forfeit struct {
 }
 
 type Draw struct {
-	Kind 	string `json:"type"`
+	Kind string `json:"type"`
 }
 
 func (c *Client) writeThread() {
@@ -160,7 +160,7 @@ func (c *Client) readThread() {
 				c.currentGame.redWantsDraw = true
 				c.currentGame.blackPlayer.send <- message
 			}
-			
+
 			if c.currentGame.redWantsDraw && c.currentGame.blackWantsDraw {
 				c.currentGame.handleGameDraw()
 			}

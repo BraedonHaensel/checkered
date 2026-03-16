@@ -1,4 +1,4 @@
-package main
+package checkered
 
 /*
 Cyclic queue with fixed capacity
