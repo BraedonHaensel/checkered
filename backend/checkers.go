@@ -1,4 +1,4 @@
-package main
+package checkered
 
 import (
 	"encoding/json"
@@ -33,16 +33,16 @@ const (
 )
 
 type Game struct {
-	gameID       	uuid.UUID
-	redPlayer    	*Client
-	blackPlayer  	*Client
-	tileStates   	[]TileState
-	turn         	PieceColor
-	previousMoves	[]GameMove
-	resultChan   	chan GameResult
-	blackWantsDraw	bool
-	redWantsDraw	bool
-	mu            sync.Mutex
+	gameID         uuid.UUID
+	redPlayer      *Client
+	blackPlayer    *Client
+	tileStates     []TileState
+	turn           PieceColor
+	previousMoves  []GameMove
+	resultChan     chan GameResult
+	blackWantsDraw bool
+	redWantsDraw   bool
+	mu             sync.Mutex
 }
 
 func generateInitialTileStates() []TileState {
@@ -400,7 +400,7 @@ func (game *Game) playMove(gameMove GameMove) bool {
 	if !game.isValidMove(gameMove) {
 		return false
 	}
-	game.redWantsDraw = false 
+	game.redWantsDraw = false
 	game.blackWantsDraw = false
 	newTileStates := make([]TileState, len(game.tileStates))
 	copy(newTileStates, game.tileStates)
@@ -549,7 +549,7 @@ func (game *Game) handleGameDraw() {
 	gameResult := GameResult{
 		gameID: game.gameID,
 		winner: nil,
-		loser: nil,
+		loser:  nil,
 	}
 	game.resultChan <- gameResult
 }
