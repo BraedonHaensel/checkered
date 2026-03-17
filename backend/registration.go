@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Gets the fully qualified URL for a server address
+// Gets the fully qualified URL for a server address.
 func GetFullUrl(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		// Port provided, so determine the local IP address
@@ -29,7 +29,7 @@ func GetFullUrl(addr string) string {
 	}
 }
 
-// Sends a registration request for a server to the Name Server
+// Sends a registration request for a server to the Name Server.
 func SendRegistrationRequest(serverUrl, registrationUrl string) {
 	// Create the registration request
 	body := fmt.Appendf(nil, `{"url": "%s"}`, serverUrl)

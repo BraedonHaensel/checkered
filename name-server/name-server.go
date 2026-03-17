@@ -25,7 +25,7 @@ type registerServerRequest struct {
 	Url string `json:"url"`
 }
 
-// Gets the fully qualified URL for the Name Server address
+// Gets the fully qualified URL for the Name Server address.
 func getFullUrl(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		// Port provided, so determine the local IP address
@@ -65,7 +65,7 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 	return data, nil, 0
 }
 
-// GET /matchmakers - Get the list of known Matchmaker servers
+// GET /matchmakers - Gets the list of known Matchmaker servers.
 func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
 	jsonData, err := json.Marshal(matchmakerUrls)
 	if err != nil {
@@ -76,7 +76,7 @@ func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
 	w.Write(jsonData)
 }
 
-// GET /game-servers - Get the list of known Game Servers
+// GET /game-servers - Gets the list of known Game Servers.
 func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
 	jsonData, err := json.Marshal(gameServerUrls)
 	if err != nil {
@@ -88,7 +88,6 @@ func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
 }
 
 // POST /register/matchmaker - Handle registering a Matchmaker server.
-// Name Server
 func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to register
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
@@ -131,8 +130,7 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("Game Server registered successfully."))
 }
 
-// POST /deregister/matchmaker - Handle registering a Matchmaker server.
-// Name Server
+// POST /deregister/matchmaker - Handle deregistering a Matchmaker server.
 func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to deregister
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
@@ -158,7 +156,7 @@ func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("Matchmaker deregistered successfully."))
 }
 
-// POST /deregister/game-server Handle registering a Game Server.
+// POST /deregister/game-server Handle deregistering a Game Server.
 func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to deregister
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
@@ -184,7 +182,7 @@ func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("Game Server deregistered successfully."))
 }
 
-// Run the Name Server
+// Run the Name Server.
 func main() {
 	flag.Parse()
 
