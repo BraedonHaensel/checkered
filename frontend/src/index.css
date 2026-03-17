@@ -31,7 +31,7 @@ body {
 }
 
 body.login-page {
-    background-image: url('login_background.png');
+    background-image: url('/login_background.png');
     background-size: cover;
     background-position: center;
 }
