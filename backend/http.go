@@ -42,8 +42,7 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 	return data, nil, 0
 }
 
-// Parses JSON data from a response. Returns an error and HTTP status code if the
-// parsing fails.
+// Parses JSON data from a response. Returns an error if the parsing fails.
 func ParseJsonResponseData[T any](res *http.Response) (T, error) {
 	var data T
 	// Parse the response body
