@@ -16,13 +16,13 @@ import (
 // Name Server address flag
 var addr = flag.String("addr", ":9000", "http service address")
 
-// Lists of active server addresses
-var matchmakerAddresses = []string{}
-var gameServerAddresses = []string{}
+// Lists of active server URLs
+var matchmakerUrls = []string{}
+var gameServerUrls = []string{}
 
 // Request format for Matchmaker or Game Server registration
 type registerServerRequest struct {
-	Address string `json:"address"`
+	Url string `json:"url"`
 }
 
 // Gets the fully qualified URL for the Name Server address
@@ -67,7 +67,7 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 
 // GET /matchmakers - Get the list of known Matchmaker servers
 func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
-	jsonData, err := json.Marshal(matchmakerAddresses)
+	jsonData, err := json.Marshal(matchmakerUrls)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
 
 // GET /game-servers - Get the list of known Game Servers
 func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
-	jsonData, err := json.Marshal(gameServerAddresses)
+	jsonData, err := json.Marshal(gameServerUrls)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,18 +90,18 @@ func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
 // POST /register/matchmaker - Handle registering a Matchmaker server.
 // Name Server
 func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
-	// Parse the server address to register
+	// Parse the server URL to register
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	address := data.Address
-	log.Println("POST /register/matchmaker -", address)
+	url := data.Url
+	log.Println("POST /register/matchmaker -", url)
 
-	// Add the server address to the list of active servers
-	if !slices.Contains(matchmakerAddresses, address) {
-		matchmakerAddresses = append(matchmakerAddresses, address)
+	// Add the server URL to the list of active servers
+	if !slices.Contains(matchmakerUrls, url) {
+		matchmakerUrls = append(matchmakerUrls, url)
 	}
 
 	// Send a response to the client
@@ -111,18 +111,18 @@ func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 
 // POST /register/game-server Handle registering a Game Server.
 func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
-	// Parse the server address to register
+	// Parse the server URL to register
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	address := data.Address
-	log.Println("POST /register/game-server -", address)
+	url := data.Url
+	log.Println("POST /register/game-server -", url)
 
-	// If new, add the server address to the list of active servers
-	if !slices.Contains(gameServerAddresses, address) {
-		gameServerAddresses = append(gameServerAddresses, address)
+	// If new, add the server URL to the list of active servers
+	if !slices.Contains(gameServerUrls, url) {
+		gameServerUrls = append(gameServerUrls, url)
 	}
 
 	// Send a success response to the client (regardless of whether the server
@@ -134,20 +134,20 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 // POST /deregister/matchmaker - Handle registering a Matchmaker server.
 // Name Server
 func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
-	// Parse the server address to deregister
+	// Parse the server URL to deregister
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	address := data.Address
-	log.Println("POST /deregister/matchmaker -", address)
+	url := data.Url
+	log.Println("POST /deregister/matchmaker -", url)
 
-	// Remove the address from the list of active servers
-	for i, addr := range matchmakerAddresses {
-		if addr == address {
-			matchmakerAddresses = append(matchmakerAddresses[:i],
-				matchmakerAddresses[i+1:]...)
+	// Remove the URL from the list of active servers
+	for i, addr := range matchmakerUrls {
+		if addr == url {
+			matchmakerUrls = append(matchmakerUrls[:i],
+				matchmakerUrls[i+1:]...)
 			break
 		}
 	}
@@ -160,20 +160,20 @@ func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 
 // POST /deregister/game-server Handle registering a Game Server.
 func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
-	// Parse the server address to deregister
+	// Parse the server URL to deregister
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	address := data.Address
-	log.Println("POST /deregister/game-server -", address)
+	url := data.Url
+	log.Println("POST /deregister/game-server -", url)
 
-	// Remove the address from the list of active servers
-	for i, addr := range gameServerAddresses {
-		if addr == address {
-			gameServerAddresses = append(gameServerAddresses[:i],
-				gameServerAddresses[i+1:]...)
+	// Remove the URL from the list of active servers
+	for i, addr := range gameServerUrls {
+		if addr == url {
+			gameServerUrls = append(gameServerUrls[:i],
+				gameServerUrls[i+1:]...)
 			break
 		}
 	}

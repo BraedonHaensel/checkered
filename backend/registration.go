@@ -32,7 +32,7 @@ func GetFullUrl(addr string) string {
 // Sends a registration request for a server to the Name Server
 func SendRegistrationRequest(serverUrl, registrationUrl string) {
 	// Create the registration request
-	body := []byte(fmt.Sprintf(`{"address": "%s"}`, serverUrl))
+	body := fmt.Appendf(nil, `{"url": "%s"}`, serverUrl)
 	req, err := http.NewRequest("POST", registrationUrl, bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatal("failed to create Name Server registration request: ", err)

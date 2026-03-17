@@ -31,7 +31,7 @@ cd backend && make game-server
 ```
 
 Use the `-addr` flag to change the server's address/port.
-Use the `-ns` flag to change the Name Server's address (fully qualified URL)
+Use the `-ns` flag to change the Name Server's fully qualified URL
 
 ## Name Server
 
