@@ -3,9 +3,9 @@ package checkered
 /*
 Cyclic queue with fixed capacity
 Use:
-	- `InitQueue` to properly initialize the queue
-	- `Enqueue` to add elements to the queue; and
-	- `Dequeue` to remove elements from the queue
+  - `InitQueue` to properly initialize the queue
+  - `Enqueue` to add elements to the queue; and
+  - `Dequeue` to remove elements from the queue
 */
 type Queue[T any] struct {
 	maxSize int // The maximum capacity of the queue
@@ -18,8 +18,8 @@ type Queue[T any] struct {
 /*
 Initialize a queue
 Args:
-	- queue *Queue[T]: Pointer to the queue to initialize
-	- size int: The max size of the queue
+  - queue *Queue[T]: Pointer to the queue to initialize
+  - size int: The max size of the queue
 */
 func InitQueue[T any](queue *Queue[T], size int) {
 	queue.arr = make([]T, size)
@@ -32,7 +32,7 @@ func InitQueue[T any](queue *Queue[T], size int) {
 /*
 Add an element to the queue
 Args:
-	- value T: The value to add
+  - value T: The value to add
 */
 func (queue *Queue[T]) enqueue(value T) {
 	if queue.size == queue.maxSize {
@@ -46,9 +46,10 @@ func (queue *Queue[T]) enqueue(value T) {
 /*
 Remove an element from the queue
 Args:
-	- queue *Queue[T]: Pointer to the queue to remove an element from
+  - queue *Queue[T]: Pointer to the queue to remove an element from
+
 Returns:
-	- T: The element removed
+  - T: The element removed
 */
 func (queue *Queue[T]) dequeue() T {
 	if queue.size == 0 {

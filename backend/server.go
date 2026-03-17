@@ -21,6 +21,7 @@ const (
 )
 
 type Server struct {
+	ID int
 	// we map username to client
 	clients map[string]*Client
 	// games that new clients are in
@@ -33,9 +34,12 @@ type Server struct {
 	unregister   chan *Client
 	moveReceiver chan GameMove
 	gameResults  chan GameResult
+
+	// URL of the Name Server
+	nameServerURL string
 }
 
-func InitServer() *Server {
+func InitServer(nameServerURL string) *Server {
 	server := Server{
 		clients:        make(map[string]*Client),
 		games:          make(map[uuid.UUID]*Game),
@@ -44,6 +48,7 @@ func InitServer() *Server {
 		leaderboard:    &Leaderboard{},
 		Mu_leaderboard: sync.Mutex{},
 		gameResults:    make(chan GameResult, 10),
+		nameServerURL:  nameServerURL,
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
@@ -95,7 +100,6 @@ func ServeWs(server *Server, w http.ResponseWriter, r *http.Request) {
 	// let the server know and handle the new client
 	// server.register <- &client
 	log.Printf("Client \"%s\" connected", client.username)
-
 }
 
 // main idea of this loop is to register new active users and put them
@@ -197,4 +201,10 @@ func (server *Server) ServerLoop() {
 			server.clients[gameRoom.redPlayer.username].send <- redBytes
 		}
 	}
+}
+
+// Register with the Name Server
+func (server *Server) Register(url string) {
+	server.ID = SendRegistrationRequest(url, server.nameServerURL+"/register/game-server")
+	log.Println("Registered with ID:", server.ID)
 }

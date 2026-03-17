@@ -8,11 +8,15 @@ import (
 	Checkered "github.com/akeuben/checkered"
 )
 
-var addr = flag.String("addr", ":4000", "http service address")
+var (
+	addr          = flag.String("addr", ":4000", "http service address")
+	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+)
 
 func main() {
 	flag.Parse()
-	matchmaker := Checkered.NewMatchmaker()
+	matchmaker := Checkered.NewMatchmaker(*nameServerURL)
+
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
 	})
@@ -28,7 +32,12 @@ func main() {
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
-	Checkered.LogAddress(*addr, "Matchmaker")
+
+	// Register with the Name Server
+	url := Checkered.GetFullURL(*addr)
+	log.Println("Matchmaker running on", url)
+	matchmaker.Register(url)
+
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
