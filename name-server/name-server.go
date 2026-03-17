@@ -106,7 +106,7 @@ func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 
 	// Send a response to the client
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Matchmaker added successfully."))
+	w.Write([]byte("Matchmaker registered successfully."))
 }
 
 // POST /register/game-server Handle registering a Game Server.
@@ -128,7 +128,60 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	// Send a success response to the client (regardless of whether the server
 	// was already registered with the Name Server)
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Game Server added successfully."))
+	w.Write([]byte("Game Server registered successfully."))
+}
+
+// POST /deregister/matchmaker - Handle registering a Matchmaker server.
+// Name Server
+func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
+	// Parse the server address to deregister
+	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+	address := data.Address
+	log.Println("POST /deregister/matchmaker -", address)
+
+	// Remove the address from the list of active servers
+	for i, addr := range matchmakerAddresses {
+		if addr == address {
+			matchmakerAddresses = append(matchmakerAddresses[:i],
+				matchmakerAddresses[i+1:]...)
+			break
+		}
+	}
+
+	// Send a success response to the client (regardless of whether the server
+	// was already registered with the Name Server)
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("Matchmaker deregistered successfully."))
+}
+
+// POST /deregister/game-server Handle registering a Game Server.
+func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
+	// Parse the server address to deregister
+	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+	address := data.Address
+	log.Println("POST /deregister/game-server -", address)
+
+	// Remove the address from the list of active servers
+	for i, addr := range gameServerAddresses {
+		if addr == address {
+			gameServerAddresses = append(gameServerAddresses[:i],
+				gameServerAddresses[i+1:]...)
+			break
+		}
+	}
+
+	// Send a success response to the client (regardless of whether the server
+	// was already registered with the Name Server)
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("Game Server deregistered successfully."))
 }
 
 // Run the Name Server
@@ -140,6 +193,8 @@ func main() {
 	http.HandleFunc("/game-servers", handleGetGameServers)
 	http.HandleFunc("POST /register/matchmaker", handleRegisterMatchmaker)
 	http.HandleFunc("POST /register/game-server", handleRegisterGameServer)
+	http.HandleFunc("POST /deregister/matchmaker", handleDeregisterMatchmaker)
+	http.HandleFunc("POST /deregister/game-server", handleDeregisterGameServer)
 
 	url := getFullUrl(*addr)
 	log.Println("Game Server running on", url)
