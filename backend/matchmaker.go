@@ -188,6 +188,12 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 		}
 		if url == "" {
 			// Message received from an unknown leader ID, ignore
+
+			// TODO Should URL be included in case it's a new server that joined?
+			// Or do a refresh instead in case there's other out of date info?
+			//
+			//
+			//
 			return
 		}
 		log.Printf("Received election(%d). Bullying as self ID is higher: %d\n", id, m.ID)
@@ -227,6 +233,14 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := data.ID
+
+	// TODO what if you don't know the leader? You won't have a URL entry for them in your database
+	// Could send the url in the leader(i) message, or could refresh and then check if you
+	// have it now
+	//
+	//
+	//
+	//
 
 	// Set the new leader
 	log.Println("Received new leader ID:", id)
