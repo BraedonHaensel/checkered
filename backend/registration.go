@@ -38,15 +38,7 @@ func GetFullURL(addr string) string {
 func SendRegistrationRequest(serverUrl, registrationUrl string) int {
 	// Create the registration request
 	body := fmt.Appendf(nil, `{"url": "%s"}`, serverUrl)
-	req, err := http.NewRequest("POST", registrationUrl, bytes.NewBuffer(body))
-	if err != nil {
-		log.Fatal("failed to create Name Server registration request: ", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the registration request
-	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := http.Post(registrationUrl, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatal("Name Server registration failed: ", err)
 	}
@@ -57,11 +49,12 @@ func SendRegistrationRequest(serverUrl, registrationUrl string) int {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.Fatalf("Name Server registration failed with status code %d. Failed "+
-				"to parse the response body: %s", res.StatusCode, err)
+				"to parse the response body: %v", res.StatusCode, err)
 		}
 		log.Fatalf("Name Server registration failed with status code %d: %s", res.StatusCode, string(body))
 	}
 
+	// Parse the registered ID from the response
 	data, err := ParseJsonResponseData[registerServerResponse](res)
 	if err != nil {
 		log.Fatal("Name Server registration failed: ", err)

@@ -15,7 +15,8 @@ var (
 
 func main() {
 	flag.Parse()
-	matchmaker := Checkered.NewMatchmaker(*nameServerURL)
+	url := Checkered.GetFullURL(*addr)
+	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
 
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
@@ -37,7 +38,7 @@ func main() {
 	http.HandleFunc("POST /leader-election/election", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleElectionRequest(w, r)
 	})
-	http.HandleFunc("/leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleBullyRequest(w, r)
 	})
 	http.HandleFunc("POST /leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
@@ -45,19 +46,14 @@ func main() {
 	})
 
 	// Register with the Name Server
-	url := Checkered.GetFullURL(*addr)
 	log.Println("Matchmaker running on", url)
 	matchmaker.Register(url)
 
 	// Start a leader election
 	matchmaker.InitiateElection()
 
-
 	// TODO get list of servers from Name Server before/at the start of the election
 	// And have a server refresh loop
-
-
-
 
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
