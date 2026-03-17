@@ -10,12 +10,12 @@ import (
 
 var (
 	addr          = flag.String("addr", ":4000", "http service address")
-	nameServerUrl = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
 )
 
 func main() {
 	flag.Parse()
-	matchmaker := Checkered.NewMatchmaker(*nameServerUrl)
+	matchmaker := Checkered.NewMatchmaker(*nameServerURL)
 
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)

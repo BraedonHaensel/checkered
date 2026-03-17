@@ -10,12 +10,12 @@ import (
 
 var (
 	addr          = flag.String("addr", ":5000", "http service address")
-	nameServerUrl = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
 )
 
 func main() {
 	flag.Parse()
-	server := Checkered.InitServer(*nameServerUrl)
+	server := Checkered.InitServer(*nameServerURL)
 	go server.ServerLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		Checkered.ServeWs(server, w, r)
