@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -90,17 +89,17 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 	var data T
 	// Parse the request body
 	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return data, errors.New("failed to read the request body"), http.StatusInternalServerError
-	}
 	defer req.Body.Close()
+	if err != nil {
+		return data, fmt.Errorf("failed to read the request body: %w", err), http.StatusInternalServerError
+	}
 
 	// Parse the JSON request data
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&data)
 	if err != nil {
-		return data, errors.New("invalid request data"), http.StatusBadRequest
+		return data, fmt.Errorf("invalid request data: %w", err), http.StatusBadRequest
 	}
 	return data, nil, 0
 }

@@ -10,8 +10,12 @@ import (
 	"strings"
 )
 
+type registerServerResponse struct {
+	ID int `json:"id"`
+}
+
 // Gets the fully qualified URL for a server address.
-func GetFullUrl(addr string) string {
+func GetFullURL(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		// Port provided, so determine the local IP address
 		// Source: https://gosamples.dev/local-ip-address/
@@ -29,16 +33,17 @@ func GetFullUrl(addr string) string {
 	}
 }
 
-// Sends a registration request for a server to the Name Server.
-func SendRegistrationRequest(serverUrl, registrationUrl string) {
+// Sends a registration request for a server to the Name Server. Returns the
+// assigned ID for the server.
+func SendRegistrationRequest(serverUrl, registrationUrl string) int {
 	// Create the registration request
 	body := fmt.Appendf(nil, `{"url": "%s"}`, serverUrl)
 	req, err := http.NewRequest("POST", registrationUrl, bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatal("failed to create Name Server registration request: ", err)
 	}
-	req.Header.Add("Content-Type", "application/json")
-	
+	req.Header.Set("Content-Type", "application/json")
+
 	// Send the registration request
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -46,15 +51,20 @@ func SendRegistrationRequest(serverUrl, registrationUrl string) {
 		log.Fatal("Name Server registration failed: ", err)
 	}
 	defer res.Body.Close()
-	
+
 	// Check the status code to see if the request succeeded
 	if res.StatusCode != http.StatusCreated {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.Fatalf("Name Server registration failed with status code %d. Failed "+
-			"to parse the response body: %s", res.StatusCode, err)
+				"to parse the response body: %s", res.StatusCode, err)
 		}
 		log.Fatalf("Name Server registration failed with status code %d: %s", res.StatusCode, string(body))
 	}
+
+	data, err := ParseJsonResponseData[registerServerResponse](res)
+	if err != nil {
+		log.Fatal("Name Server registration failed: ", err)
+	}
+	return data.ID
 }
-	
