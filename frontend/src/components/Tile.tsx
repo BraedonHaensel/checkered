@@ -2,6 +2,7 @@ import React from 'react'
 import { PlayerColor, TileState } from '../enums'
 import { isBlackPiece, isKingPiece } from '../game-utils'
 import Piece from './Piece'
+import { cn } from '../lib/utils'
 
 type LightTileProps = {
     tileIndex?: never
@@ -61,10 +62,10 @@ const Tile = React.memo(
             >
                 {/* Previous move indicator */}
                 <div
-                    className={
-                        'flex h-full w-full items-center justify-center ' +
-                        `${showPreviousMoveHighlight ? 'bg-[#DFFFC4]/35' : ''}`
-                    }
+                    className={cn(
+                        'flex h-full w-full items-center justify-center',
+                        showPreviousMoveHighlight && 'bg-[#DFFFC4]/35'
+                    )}
                 >
                     {/* Display a checkers piece */}
                     {hasPiece && (
