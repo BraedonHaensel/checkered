@@ -5,28 +5,68 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"slices"
 	"strings"
+	"sync"
 )
 
 // Name Server address flag
 var addr = flag.String("addr", ":9000", "http service address")
 
-// Lists of active server URLs
-var matchmakerUrls = []string{}
-var gameServerUrls = []string{}
+// Incrementing IDs to assign to the next registered server
+var (
+	nextMatchmakerID = 0
+	nextGameServerID = 0
+	matchmakerMu     sync.Mutex
+	gameServerMu     sync.Mutex
+)
 
-// Request format for Matchmaker or Game Server registration
+// Each registered server has an ID and a URL
+type Server struct {
+	ID  int    `json:"id"`
+	URL string `json:"url"`
+}
+
+// Lists of active server URLs
+var (
+	matchmakers = []Server{}
+	gameServers = []Server{}
+)
+
+// Request format to register a Matchmaker or Game Server
 type registerServerRequest struct {
-	Url string `json:"url"`
+	URL string `json:"url"`
+}
+
+// Request format to deregister a Matchmaker or Game Server
+type deregisterServerRequest struct {
+	ID int `json:"id"`
+}
+
+// Gets and increments the next Matchmaker ID.
+func getNextMatchmakerID() int {
+	matchmakerMu.Lock()
+	defer matchmakerMu.Unlock()
+	id := nextMatchmakerID
+	nextMatchmakerID++
+	return id
+}
+
+// Gets and increments the next Game Server ID.
+func getNextGameServerID() int {
+	gameServerMu.Lock()
+	defer gameServerMu.Unlock()
+	id := nextGameServerID
+	nextGameServerID++
+	return id
 }
 
 // Gets the fully qualified URL for the Name Server address.
-func getFullUrl(addr string) string {
+func getFullURL(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		// Port provided, so determine the local IP address
 		// Source: https://gosamples.dev/local-ip-address/
@@ -67,27 +107,29 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 
 // GET /matchmakers - Gets the list of known Matchmaker servers.
 func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
-	jsonData, err := json.Marshal(matchmakerUrls)
+	jsonData, err := json.Marshal(matchmakers)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("GET /matchmakers -", string(jsonData))
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonData)
 }
 
 // GET /game-servers - Gets the list of known Game Servers.
 func handleGetGameServers(w http.ResponseWriter, req *http.Request) {
-	jsonData, err := json.Marshal(gameServerUrls)
+	jsonData, err := json.Marshal(gameServers)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("GET /game-servers -", string(jsonData))
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonData)
 }
 
-// POST /register/matchmaker - Handle registering a Matchmaker server.
+// POST /register/matchmaker - Handle registering a Matchmaker.
 func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to register
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
@@ -95,20 +137,22 @@ func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	url := data.Url
+	url := data.URL
 	log.Println("POST /register/matchmaker -", url)
 
-	// Add the server URL to the list of active servers
-	if !slices.Contains(matchmakerUrls, url) {
-		matchmakerUrls = append(matchmakerUrls, url)
-	}
+	// Register the server
+	id := getNextMatchmakerID()
+	matchmakerMu.Lock()
+	matchmakers = append(matchmakers, Server{id, url})
+	matchmakerMu.Unlock()
 
-	// Send a response to the client
+	// Send a success response to the client
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Matchmaker registered successfully."))
+	fmt.Fprintf(w, `{"id": %d}`, id)
 }
 
-// POST /register/game-server Handle registering a Game Server.
+// POST /register/game-server - Handle registering a Game Server.
 func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to register
 	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
@@ -116,39 +160,42 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	url := data.Url
+	url := data.URL
 	log.Println("POST /register/game-server -", url)
 
-	// If new, add the server URL to the list of active servers
-	if !slices.Contains(gameServerUrls, url) {
-		gameServerUrls = append(gameServerUrls, url)
-	}
+	// Register the server
+	id := getNextGameServerID()
+	gameServerMu.Lock()
+	gameServers = append(gameServers, Server{id, url})
+	gameServerMu.Unlock()
 
-	// Send a success response to the client (regardless of whether the server
-	// was already registered with the Name Server)
+	// Send a success response to the client
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Game Server registered successfully."))
+	fmt.Fprintf(w, `{"id": %d}`, id)
 }
 
-// POST /deregister/matchmaker - Handle deregistering a Matchmaker server.
+// POST /deregister/matchmaker - Handle deregistering a Matchmaker.
 func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
-	// Parse the server URL to deregister
-	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
+	// Parse the server ID to deregister
+	data, err, errStatus := parseJsonRequestData[deregisterServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	url := data.Url
-	log.Println("POST /deregister/matchmaker -", url)
+	id := data.ID
+	log.Println("POST /deregister/matchmaker -", id)
 
 	// Remove the URL from the list of active servers
-	for i, addr := range matchmakerUrls {
-		if addr == url {
-			matchmakerUrls = append(matchmakerUrls[:i],
-				matchmakerUrls[i+1:]...)
+	matchmakerMu.Lock()
+	for i, server := range matchmakers {
+		if server.ID == id {
+			matchmakers = append(matchmakers[:i],
+				matchmakers[i+1:]...)
 			break
 		}
 	}
+	matchmakerMu.Unlock()
 
 	// Send a success response to the client (regardless of whether the server
 	// was already registered with the Name Server)
@@ -159,22 +206,24 @@ func handleDeregisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 // POST /deregister/game-server Handle deregistering a Game Server.
 func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
 	// Parse the server URL to deregister
-	data, err, errStatus := parseJsonRequestData[registerServerRequest](req)
+	data, err, errStatus := parseJsonRequestData[deregisterServerRequest](req)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	url := data.Url
-	log.Println("POST /deregister/game-server -", url)
+	id := data.ID
+	log.Println("POST /deregister/game-server -", id)
 
 	// Remove the URL from the list of active servers
-	for i, addr := range gameServerUrls {
-		if addr == url {
-			gameServerUrls = append(gameServerUrls[:i],
-				gameServerUrls[i+1:]...)
+	gameServerMu.Lock()
+	for i, server := range gameServers {
+		if server.ID == id {
+			gameServers = append(gameServers[:i],
+				gameServers[i+1:]...)
 			break
 		}
 	}
+	gameServerMu.Unlock()
 
 	// Send a success response to the client (regardless of whether the server
 	// was already registered with the Name Server)
@@ -194,8 +243,8 @@ func main() {
 	http.HandleFunc("POST /deregister/matchmaker", handleDeregisterMatchmaker)
 	http.HandleFunc("POST /deregister/game-server", handleDeregisterGameServer)
 
-	url := getFullUrl(*addr)
-	log.Println("Game Server running on", url)
+	url := getFullURL(*addr)
+	log.Println("Name Server running on", url)
 	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
