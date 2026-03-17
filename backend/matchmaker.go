@@ -6,23 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 )
 
 const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
-
-// The information known about the other Matchmakers in the network
-type OtherMatchmaker struct {
-	ID  int
-	URL string
-}
-
-type ElectionMessage struct {
-	ID  int    `json:"id"`
-	URL string `json:"url"`
-}
-type LeaderMessage = ElectionMessage
 
 // Responsible for handling the queue for new players finding a game, as well as
 // maintaining the leaderboard and handling all leaderboard requests
@@ -39,7 +28,7 @@ type Matchmaker struct {
 	nameServerURL string
 
 	// Other Matchmakers in the network
-	otherMatchmakers []OtherMatchmaker
+	otherMatchmakers []Server
 	// Whether this server is running in the current leader election
 	runningInElection bool
 	// ID of the current leader server
@@ -62,17 +51,69 @@ func NewMatchmaker(url, nameServerURL string) Matchmaker {
 		queue:             queue,
 		nameServerURL:     nameServerURL,
 		runningInElection: false,
-		otherMatchmakers:  []OtherMatchmaker{},
+		otherMatchmakers:  []Server{},
 	}
+}
+
+// Register with the Name Server
+func (m *Matchmaker) Register(url string) {
+	id, err := SendRegistrationRequest(url, m.nameServerURL+"/register/matchmaker")
+	if err != nil {
+		log.Fatal(err)
+	}
+	m.ID = id
+	log.Println("Registered with ID:", m.ID)
+}
+
+// Refreshes the list of known other Matchmakers.
+func (m *Matchmaker) RefreshOtherMatchmakersList() {
+	// Get the list of all Matchmakers from the Name Server
+	matchmakers, err := SendServerListRequest(m.nameServerURL + "/matchmakers")
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Filter itself out of the list
+	otherMatchmakers := []Server{}
+	foundInList := false
+	for i, matchmaker := range matchmakers {
+		if matchmaker.ID == m.ID {
+			otherMatchmakers = append(matchmakers[:i],
+				matchmakers[i+1:]...)
+			foundInList = true
+			break
+		}
+	}
+
+	if !foundInList {
+		// Failed to find itself in the Name Server's list, something went wrong
+		log.Fatalf("Matchmaker %d failed to find itself in the Name Server's list of Matchmakers", m.ID)
+	}
+
+	log.Println("Refreshed list of other Matchmakers: ", otherMatchmakers)
+	m.otherMatchmakers = matchmakers
+}
+
+// Deregisters another Matchmaker from the Name Server.
+func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
+	// Create the registration request
+	log.Println("Deregistering Matchmaker", otherMatchmakerID)
+	body := fmt.Appendf(nil, `{"id": "%d"}`, otherMatchmakerID)
+	res, err := http.Post(m.nameServerURL+"/deregister/matchmaker", "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to deregister Matchmaker %d: %v", otherMatchmakerID, err)
+	}
+	defer res.Body.Close()
 }
 
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
 	log.Println("Initiating a leader election")
 	m.runningInElection = true
+	m.RefreshOtherMatchmakersList()
 
 	// Check which Matchmakers have a higher ID than this one
-	higherIDMatchmakers := []OtherMatchmaker{}
+	higherIDMatchmakers := []Server{}
 	for _, otherMatchmaker := range m.otherMatchmakers {
 		if otherMatchmaker.ID > m.ID {
 			higherIDMatchmakers = append(higherIDMatchmakers, otherMatchmaker)
@@ -129,6 +170,126 @@ func (m *Matchmaker) InitiateElection() {
 	}
 }
 
+// Sends an election(i) message to another Matchmaker.
+func (m *Matchmaker) sendElectionMessage(otherMatchmakerURL string) {
+	// Create the election(i) message data
+	data := Server{
+		ID:  m.ID,
+		URL: m.URL,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Send an election(i) message
+	res, err := http.Post(otherMatchmakerURL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Failed to send an election(%d) message to %s. This is expected if the Matchmaker "+
+			"is down.", m.ID, otherMatchmakerURL)
+		return
+	}
+	defer res.Body.Close()
+}
+
+// Sends a leader(i) message to another Matchmaker.
+func (m *Matchmaker) sendLeaderMessage(otherMatchmakerURL string) {
+	// Create the leader(i) message data
+	data := Server{
+		ID:  m.ID,
+		URL: m.URL,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Send a leader(i) message
+	res, err := http.Post(otherMatchmakerURL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Failed to send a leader(%d) message to %s. This is expected if the Matchmaker "+
+			"is down.", m.ID, otherMatchmakerURL)
+		return
+	}
+	defer res.Body.Close()
+}
+
+// Sends a bully() message to another Matchmaker.
+func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
+	// Send a bully() message
+	res, err := http.Post(otherMatchmaker.URL+"/leader-election/bully", "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming they are down", otherMatchmaker.ID)
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+		return
+	}
+	defer res.Body.Close()
+}
+
+// Handle an incoming election(i) Bully leader election message.
+func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Request) {
+	// Parse the elected Matchmaker's ID from the request
+	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+	id := otherMatchmaker.ID
+
+	// Check if the message is from an unknown Matchmaker
+	if !slices.Contains(m.otherMatchmakers, otherMatchmaker) {
+		m.otherMatchmakers = append(m.otherMatchmakers, otherMatchmaker)
+	}
+
+	if id < m.ID {
+		// Message received from a server with a lower ID, so bully them.
+		log.Printf("Received election(%d). Bullying as its ID is higher: %d\n", id, m.ID)
+		m.sendBullyMessage(otherMatchmaker)
+		if !m.runningInElection {
+			// This server has a higher ID and isn't running yet, so start an election
+			m.InitiateElection()
+		}
+	}
+}
+
+// Handle an incoming leader(i) Bully leader election message.
+func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request) {
+	// If this server was waiting, interrupt the leader timer so it never fires
+	if m.leaderTimer != nil && m.leaderTimer.Stop() {
+		if m.leaderTimerChan != nil {
+			// Close the leader timer chan to notify the thread to stop waiting for the timer
+			close(m.leaderTimerChan)
+		}
+	}
+
+	// Parse the Matchmaker's ID from the request
+	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+	id := otherMatchmaker.ID
+
+	// Check if the message is from an unknown Matchmaker
+	if !slices.Contains(m.otherMatchmakers, otherMatchmaker) {
+		m.otherMatchmakers = append(m.otherMatchmakers, otherMatchmaker)
+	}
+
+	// Set the new leader
+	log.Println("Received new leader ID:", id)
+	m.leaderID = id
+	m.runningInElection = false
+}
+
+// Handle an incoming bully() Bully leader election message.
+func (m *Matchmaker) HandleBullyRequest(w http.ResponseWriter, r *http.Request) {
+	// Interrupt the bully timer so it never fires
+	if m.bullyTimer != nil && m.bullyTimer.Stop() {
+		if m.bullyTimerChan != nil {
+			// Close the bully timer chan to notify the thread to stop waiting for the timer
+			close(m.bullyTimerChan)
+		}
+	}
+}
+
 func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(m.leaderboard)
 	if err != nil {
@@ -150,146 +311,4 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 // Handler for a request to leave the queue
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
-}
-
-// Register with the Name Server
-func (m *Matchmaker) Register(url string) {
-	m.ID = SendRegistrationRequest(url, m.nameServerURL+"/register/matchmaker")
-	log.Println("Registered with ID:", m.ID)
-}
-
-// Sends a leader(i) message to another Matchmaker.
-func (m *Matchmaker) sendLeaderMessage(otherMatchmakerURL string) {
-	// Create the leader(i) message data
-	data := OtherMatchmaker{
-		ID:  m.ID,
-		URL: m.URL,
-	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Send a leader(i) message
-	res, err := http.Post(otherMatchmakerURL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("failed to send a leader(%d) message to %s. This is expected if the Matchmaker "+
-			"is down. Error: %v", m.ID, otherMatchmakerURL, err)
-		return
-	}
-	defer res.Body.Close()
-}
-
-// Sends an election(i) message to another Matchmaker.
-func (m *Matchmaker) sendElectionMessage(otherMatchmakerURL string) {
-	// Create the election(i) message data
-	data := OtherMatchmaker{
-		ID:  m.ID,
-		URL: m.URL,
-	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Send an election(i) message
-	res, err := http.Post(otherMatchmakerURL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("failed to send an election(%d) message to %s. This is expected if the Matchmaker "+
-			"is down. Error: %v", m.ID, otherMatchmakerURL, err)
-		return
-	}
-	defer res.Body.Close()
-}
-
-// Sends a bully() message to another Matchmaker.
-func (m *Matchmaker) sendBullyMessage(otherMatchmakerURL string) {
-	// Send a bully() message
-	res, err := http.Post(otherMatchmakerURL+"/leader-election/bully", "application/json", nil)
-	if err != nil {
-		log.Printf("failed to send a bully() message to %s. This is expected if the Matchmaker "+
-			"is down. Error: %v", otherMatchmakerURL, err)
-		return
-	}
-	defer res.Body.Close()
-}
-
-// Handle an election(i) Bully leader election message.
-func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Request) {
-	// Parse the elected server's ID from the request
-	data, err, errStatus := parseJsonRequestData[LeaderMessage](r)
-	if err != nil {
-		http.Error(w, err.Error(), errStatus)
-		return
-	}
-	id := data.ID
-
-	if id < m.ID {
-		// Message received from a server with a lower ID, so bully them. Find
-		// their URL to send the bully message to
-		url := ""
-		for _, matchmaker := range m.otherMatchmakers {
-			if matchmaker.ID == id {
-				url = matchmaker.URL
-				break
-			}
-		}
-		if url == "" {
-			// Message received from an unknown leader ID, ignore
-
-			// TODO Should URL be included in case it's a new server that joined?
-			// Or do a refresh instead in case there's other out of date info?
-			//
-			//
-			//
-			return
-		}
-		log.Printf("Received election(%d). Bullying as its ID is higher: %d\n", id, m.ID)
-		m.sendBullyMessage(url)
-		if !m.runningInElection {
-			// This server has a higher ID and isn't running yet, so start an election
-			m.InitiateElection()
-		}
-	}
-}
-
-// Handle a bully() Bully leader election message.
-func (m *Matchmaker) HandleBullyRequest(w http.ResponseWriter, r *http.Request) {
-	// Interrupt the bully timer so it never fires
-	if m.bullyTimer != nil && m.bullyTimer.Stop() {
-		if m.bullyTimerChan != nil {
-			// Close the bully timer chan to notify the thread to stop waiting for the timer
-			close(m.bullyTimerChan)
-		}
-	}
-}
-
-// Handle a leader(i) Bully leader election message.
-func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request) {
-	// If this server was waiting, interrupt the leader timer so it never fires
-	if m.leaderTimer != nil && m.leaderTimer.Stop() {
-		if m.leaderTimerChan != nil {
-			// Close the leader timer chan to notify the thread to stop waiting for the timer
-			close(m.leaderTimerChan)
-		}
-	}
-
-	// Parse the leader ID from the request
-	data, err, errStatus := parseJsonRequestData[LeaderMessage](r)
-	if err != nil {
-		http.Error(w, err.Error(), errStatus)
-		return
-	}
-	id := data.ID
-
-	// TODO what if you don't know the leader? You won't have a URL entry for them in your database
-	// Could send the url in the leader(i) message, or could refresh and then check if you
-	// have it now
-	//
-	//
-	//
-	//
-
-	// Set the new leader
-	log.Println("Received new leader ID:", id)
-	m.leaderID = id
-	m.runningInElection = false
 }
