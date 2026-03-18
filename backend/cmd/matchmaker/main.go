@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strings"
 
 	Checkered "github.com/akeuben/checkered"
 )
@@ -63,7 +64,7 @@ func main() {
 
 func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if matchmaker.IsLeader() {
+		if strings.Contains(r.URL.Path, "leader-election") || matchmaker.IsLeader() {
 			log.Println("URL: ", r.URL.Path);
 			next.ServeHTTP(w,r);
 			return;
