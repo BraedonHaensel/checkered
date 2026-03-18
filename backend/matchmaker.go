@@ -34,7 +34,8 @@ type Matchmaker struct {
 	runningInElection   bool
 	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	leaderID int
+	leaderID   int
+	leaderIDMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
 	bullyTimerChan chan struct{}
@@ -144,7 +145,9 @@ func (m *Matchmaker) InitiateElection() {
 	if len(higherIDMatchmakers) == 0 {
 		// This server has the highest ID, declare itself leader
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
+		m.leaderIDMu.Lock()
 		m.leaderID = m.ID
+		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
 		m.runningInElectionMu.Unlock()
@@ -176,7 +179,9 @@ func (m *Matchmaker) InitiateElection() {
 	case <-m.bullyTimer.C:
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
+		m.leaderIDMu.Lock()
 		m.leaderID = m.ID
+		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
 		m.runningInElectionMu.Unlock()
@@ -320,7 +325,9 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 
 	// Set the new leader
 	log.Println("Received new leader ID:", id)
+	m.leaderIDMu.Lock()
 	m.leaderID = id
+	m.leaderIDMu.Unlock()
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
 	m.runningInElectionMu.Unlock()
