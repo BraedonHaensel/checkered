@@ -2,6 +2,7 @@ package checkered
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -62,6 +63,7 @@ func (server *GameServer) Register(url string) {
 	}
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
+	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
 }
 
 type RegisterMessage struct {

@@ -63,6 +63,7 @@ func (m *Matchmaker) Register(url string) {
 	}
 	m.ID = id
 	log.Println("Registered with ID:", m.ID)
+	log.SetPrefix(fmt.Sprintf("[%d] ", m.ID))
 }
 
 // Refreshes the list of known other Matchmakers.
@@ -104,6 +105,15 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 		log.Printf("Failed to deregister Matchmaker %d: %v", otherMatchmakerID, err)
 	}
 	defer res.Body.Close()
+
+	// Filter the Matchmaker out of the list of other Matchmakers
+	for i, matchmaker := range m.otherMatchmakers {
+		if matchmaker.ID == otherMatchmakerID {
+			m.otherMatchmakers = append(m.otherMatchmakers[:i],
+				m.otherMatchmakers[i+1:]...)
+			break
+		}
+	}
 }
 
 // Initiates a leader election using the Bully algorithm.
@@ -124,11 +134,18 @@ func (m *Matchmaker) InitiateElection() {
 		// This server has the highest ID, declare itself leader
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
 		m.leaderID = m.ID
+		m.runningInElection = false
+		log.Printf("Sending leader(%d) messages\n", m.ID)
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
 		return
 	}
+
+	// Start the bully response timeout before sending the election(i) messages to avoid race conditions
+	m.bullyTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	// The chan is used to interrupt waiting for the timer when a bully() is received
+	m.bullyTimerChan = make(chan struct{})
 
 	// Send election(i) to those with a higher ID
 	log.Printf("Sending election(%d) messages to servers with higher IDs\n", m.ID)
@@ -137,15 +154,16 @@ func (m *Matchmaker) InitiateElection() {
 	}
 
 	// Wait for a bully() response
-	log.Printf("Waiting up to %dms for a bully() response\n", LEADER_ELECTION_TIMEOUT_SEC)
-	m.bullyTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
-	// The chan is used to interrupt waiting for the timer when a bully() is received
-	m.bullyTimerChan = make(chan struct{})
+	log.Printf("Waiting up to %dms for a bully() response\n",
+		LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
+
 	select {
 	case <-m.bullyTimer.C:
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
 		m.leaderID = m.ID
+		m.runningInElection = false
+		log.Printf("Sending leader(%d) messages\n", m.ID)
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
@@ -153,7 +171,8 @@ func (m *Matchmaker) InitiateElection() {
 
 	case <-m.bullyTimerChan:
 		// Bullied before the timer fired. Wait for a leader(i) message
-		log.Println("Received a bully() response. Waiting for a leader(i) message")
+		log.Printf("Received a bully() response. Waiting up to %dms for a leader(i) message\n",
+			LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
 		m.leaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
 		m.leaderTimerChan = make(chan struct{})
 		select {
@@ -185,7 +204,7 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) {
 	// Send an election(i) message
 	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming they are down", m.ID, otherMatchmaker.ID)
+		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 		return
 	}
@@ -206,7 +225,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) {
 	// Send a leader(i) message
 	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming they are down", m.ID, otherMatchmaker.ID)
+		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 		return
 	}
@@ -218,7 +237,7 @@ func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 	// Send a bully() message
 	res, err := http.Post(otherMatchmaker.URL+"/leader-election/bully", "application/json", nil)
 	if err != nil {
-		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming they are down", otherMatchmaker.ID)
+		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 		return
 	}
@@ -242,7 +261,7 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 
 	if id < m.ID {
 		// Message received from a server with a lower ID, so bully them.
-		log.Printf("Received election(%d). Bullying as its ID is higher: %d\n", id, m.ID)
+		log.Printf("Received election(%d). Bullying as this Matchmaker's ID is higher: %d\n", id, m.ID)
 		m.sendBullyMessage(otherMatchmaker)
 		if !m.runningInElection {
 			// This server has a higher ID and isn't running yet, so start an election
