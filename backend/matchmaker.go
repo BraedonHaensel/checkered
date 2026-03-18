@@ -90,15 +90,15 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 		log.Fatalf("Matchmaker %d failed to find itself in the Name Server's list of Matchmakers", m.ID)
 	}
 
-	log.Println("Refreshed list of other Matchmakers: ", otherMatchmakers)
-	m.otherMatchmakers = matchmakers
+	log.Println("Refreshed the list of other Matchmakers")
+	m.otherMatchmakers = otherMatchmakers
 }
 
 // Deregisters another Matchmaker from the Name Server.
 func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 	// Create the registration request
 	log.Println("Deregistering Matchmaker", otherMatchmakerID)
-	body := fmt.Appendf(nil, `{"id": "%d"}`, otherMatchmakerID)
+	body := fmt.Appendf(nil, `{"id": %d}`, otherMatchmakerID)
 	res, err := http.Post(m.nameServerURL+"/deregister/matchmaker", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Printf("Failed to deregister Matchmaker %d: %v", otherMatchmakerID, err)
@@ -125,7 +125,7 @@ func (m *Matchmaker) InitiateElection() {
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
 		m.leaderID = m.ID
 		for _, otherMatchmaker := range m.otherMatchmakers {
-			m.sendLeaderMessage(otherMatchmaker.URL)
+			m.sendLeaderMessage(otherMatchmaker)
 		}
 		return
 	}
@@ -133,7 +133,7 @@ func (m *Matchmaker) InitiateElection() {
 	// Send election(i) to those with a higher ID
 	log.Printf("Sending election(%d) messages to servers with higher IDs\n", m.ID)
 	for _, otherMatchmaker := range higherIDMatchmakers {
-		m.sendElectionMessage(otherMatchmaker.URL)
+		m.sendElectionMessage(otherMatchmaker)
 	}
 
 	// Wait for a bully() response
@@ -147,7 +147,7 @@ func (m *Matchmaker) InitiateElection() {
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
 		m.leaderID = m.ID
 		for _, otherMatchmaker := range m.otherMatchmakers {
-			m.sendLeaderMessage(otherMatchmaker.URL)
+			m.sendLeaderMessage(otherMatchmaker)
 		}
 		return
 
@@ -171,7 +171,7 @@ func (m *Matchmaker) InitiateElection() {
 }
 
 // Sends an election(i) message to another Matchmaker.
-func (m *Matchmaker) sendElectionMessage(otherMatchmakerURL string) {
+func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) {
 	// Create the election(i) message data
 	data := Server{
 		ID:  m.ID,
@@ -182,17 +182,17 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmakerURL string) {
 		log.Fatal(err)
 	}
 	// Send an election(i) message
-	res, err := http.Post(otherMatchmakerURL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Failed to send an election(%d) message to %s. This is expected if the Matchmaker "+
-			"is down.", m.ID, otherMatchmakerURL)
+		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming they are down", m.ID, otherMatchmaker.ID)
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 		return
 	}
 	defer res.Body.Close()
 }
 
 // Sends a leader(i) message to another Matchmaker.
-func (m *Matchmaker) sendLeaderMessage(otherMatchmakerURL string) {
+func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) {
 	// Create the leader(i) message data
 	data := Server{
 		ID:  m.ID,
@@ -203,10 +203,10 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmakerURL string) {
 		log.Fatal(err)
 	}
 	// Send a leader(i) message
-	res, err := http.Post(otherMatchmakerURL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Failed to send a leader(%d) message to %s. This is expected if the Matchmaker "+
-			"is down.", m.ID, otherMatchmakerURL)
+		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming they are down", m.ID, otherMatchmaker.ID)
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 		return
 	}
 	defer res.Body.Close()
