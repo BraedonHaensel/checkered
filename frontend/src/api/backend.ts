@@ -111,7 +111,15 @@ export class Backend {
     }
 
     private async connectSession(session: Session, user: string) {
-        await fetch(`${this.server().url}/queue/add`);
+        await fetch(`${this.server().url}/queue/add`, {
+            body: JSON.stringify({
+                username: user,
+            }),
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            method: "POST"
+        });
         // TODO: check for successful addition to queue.
         // Waiting for final queuing logic.
 
@@ -121,7 +129,15 @@ export class Backend {
         const attemptConnection = async () => {
             if(attempting) return;
             attempting = true;
-            const raw = await fetch(`${this.server().url}/queue/poll`);
+            const raw = await fetch(`${this.server().url}/queue/poll`, {
+                body: JSON.stringify({
+                    username: user,
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                method: "GET"
+            });
             const result = await raw.json();
 
             // TODO: We assume the shape of the resulting json 
