@@ -48,7 +48,7 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) {
 }
 
 // / return a json payload of the current leaderboard
-func (s *Server) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
+func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
 	err := json.NewEncoder(w).Encode(s.leaderboard)
 	if err != nil {
 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)

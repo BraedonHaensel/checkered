@@ -2,6 +2,7 @@ package checkered
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -20,7 +21,7 @@ const (
 	QUEUE_SIZE = 100
 )
 
-type Server struct {
+type GameServer struct {
 	ID int
 	// we map username to client
 	clients map[string]*Client
@@ -39,8 +40,8 @@ type Server struct {
 	nameServerURL string
 }
 
-func InitServer(nameServerURL string) *Server {
-	server := Server{
+func InitServer(nameServerURL string) *GameServer {
+	server := GameServer{
 		clients:        make(map[string]*Client),
 		games:          make(map[uuid.UUID]*Game),
 		register:       make(chan *Client),
@@ -52,6 +53,17 @@ func InitServer(nameServerURL string) *Server {
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
+}
+
+// Register with the Name Server
+func (server *GameServer) Register(url string) {
+	id, err := SendRegistrationRequest(url, server.nameServerURL+"/register/game-server")
+	if err != nil {
+		log.Fatal(err)
+	}
+	server.ID = id
+	log.Println("Registered with ID:", server.ID)
+	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
 }
 
 type RegisterMessage struct {
@@ -69,7 +81,7 @@ func checkOrigin(r *http.Request) bool {
 
 var upgrader = websocket.Upgrader{CheckOrigin: checkOrigin}
 
-func ServeWs(server *Server, w http.ResponseWriter, r *http.Request) {
+func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	// upgrade to a websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -104,7 +116,7 @@ func ServeWs(server *Server, w http.ResponseWriter, r *http.Request) {
 
 // main idea of this loop is to register new active users and put them
 // into the server struct
-func (server *Server) ServerLoop() {
+func (server *GameServer) ServerLoop() {
 	for {
 		select {
 		case client := <-server.register:
@@ -201,10 +213,4 @@ func (server *Server) ServerLoop() {
 			server.clients[gameRoom.redPlayer.username].send <- redBytes
 		}
 	}
-}
-
-// Register with the Name Server
-func (server *Server) Register(url string) {
-	server.ID = SendRegistrationRequest(url, server.nameServerURL+"/register/game-server")
-	log.Println("Registered with ID:", server.ID)
 }
