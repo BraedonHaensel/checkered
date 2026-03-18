@@ -167,10 +167,18 @@ func (m *Matchmaker) InitiateElection() {
 		m.runningInElectionMu.Unlock()
 		m.otherMatchmakersMu.Lock()
 		log.Printf("Sending leader(%d) messages\n", m.ID)
+		downMatchmakers := []Server{}
 		for _, otherMatchmaker := range m.otherMatchmakers {
-			m.sendLeaderMessage(otherMatchmaker)
+			if !m.sendLeaderMessage(otherMatchmaker) {
+				downMatchmakers = append(downMatchmakers, otherMatchmaker)
+			}
 		}
 		m.otherMatchmakersMu.Unlock()
+
+		// Deregister any Matchmakers that did not respond
+		for _, otherMatchmaker := range downMatchmakers {
+			m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+		}
 		return
 	}
 
@@ -181,8 +189,16 @@ func (m *Matchmaker) InitiateElection() {
 
 	// Send election(i) to those with a higher ID
 	log.Printf("Sending election(%d) messages to servers with higher IDs\n", m.ID)
+	downMatchmakers := []Server{}
 	for _, otherMatchmaker := range higherIDMatchmakers {
-		m.sendElectionMessage(otherMatchmaker)
+		if !m.sendElectionMessage(otherMatchmaker) {
+			downMatchmakers = append(downMatchmakers, otherMatchmaker)
+		}
+	}
+
+	// Deregister any Matchmakers that did not respond
+	for _, otherMatchmaker := range downMatchmakers {
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 	}
 
 	// Wait for a bully() response
@@ -201,10 +217,18 @@ func (m *Matchmaker) InitiateElection() {
 		m.runningInElectionMu.Unlock()
 		m.otherMatchmakersMu.Lock()
 		log.Printf("Sending leader(%d) messages\n", m.ID)
+		downMatchmakers := []Server{}
 		for _, otherMatchmaker := range m.otherMatchmakers {
-			m.sendLeaderMessage(otherMatchmaker)
+			if !m.sendLeaderMessage(otherMatchmaker) {
+				downMatchmakers = append(downMatchmakers, otherMatchmaker)
+			}
 		}
 		m.otherMatchmakersMu.Unlock()
+
+		// Deregister any Matchmakers that did not respond
+		for _, otherMatchmaker := range downMatchmakers {
+			m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+		}
 		return
 
 	case <-m.bullyTimerChan:
@@ -228,8 +252,9 @@ func (m *Matchmaker) InitiateElection() {
 	}
 }
 
-// Sends an election(i) message to another Matchmaker.
-func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) {
+// Sends an election(i) message to another Matchmaker. Returns true if the
+// recipient is alive.
+func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) bool {
 	// Create the election(i) message data
 	data := Server{
 		ID:  m.ID,
@@ -243,14 +268,15 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) {
 	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
-		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
-		return
+		return false
 	}
 	defer res.Body.Close()
+	return true
 }
 
-// Sends a leader(i) message to another Matchmaker.
-func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) {
+// Sends a leader(i) message to another Matchmaker. Returns true if the recipient
+// is alive.
+func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 	// Create the leader(i) message data
 	data := Server{
 		ID:  m.ID,
@@ -264,10 +290,10 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) {
 	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
-		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
-		return
+		return false
 	}
 	defer res.Body.Close()
+	return true
 }
 
 // Sends a bully() message to another Matchmaker.
