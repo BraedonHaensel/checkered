@@ -95,8 +95,8 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 	}
 
 	// Set the list of known other Matchmakers
-	log.Println("Refreshed the list of other Matchmakers")
 	m.otherMatchmakersMu.Lock()
+	log.Println("Refreshed the list of other Matchmakers")
 	m.otherMatchmakers = otherMatchmakers
 	m.otherMatchmakersMu.Unlock()
 }
@@ -126,8 +126,8 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
-	log.Println("Initiating a leader election")
 	m.runningInElectionMu.Lock()
+	log.Println("Initiating a leader election")
 	m.runningInElection = true
 	m.runningInElectionMu.Unlock()
 	m.RefreshOtherMatchmakersList()
@@ -144,15 +144,15 @@ func (m *Matchmaker) InitiateElection() {
 
 	if len(higherIDMatchmakers) == 0 {
 		// This server has the highest ID, declare itself leader
-		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
 		m.leaderIDMu.Lock()
+		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
 		m.leaderID = m.ID
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
 		m.runningInElectionMu.Unlock()
-		log.Printf("Sending leader(%d) messages\n", m.ID)
 		m.otherMatchmakersMu.Lock()
+		log.Printf("Sending leader(%d) messages\n", m.ID)
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
@@ -178,15 +178,15 @@ func (m *Matchmaker) InitiateElection() {
 	select {
 	case <-m.bullyTimer.C:
 		// Timer fired, so no bully() responses received in time. Declare itself leader
-		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
 		m.leaderIDMu.Lock()
+		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
 		m.leaderID = m.ID
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
 		m.runningInElectionMu.Unlock()
-		log.Printf("Sending leader(%d) messages\n", m.ID)
 		m.otherMatchmakersMu.Lock()
+		log.Printf("Sending leader(%d) messages\n", m.ID)
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
@@ -324,8 +324,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	m.otherMatchmakersMu.Unlock()
 
 	// Set the new leader
-	log.Println("Received new leader ID:", id)
 	m.leaderIDMu.Lock()
+	log.Println("Received a new leader ID:", id)
 	m.leaderID = id
 	m.leaderIDMu.Unlock()
 	m.runningInElectionMu.Lock()
