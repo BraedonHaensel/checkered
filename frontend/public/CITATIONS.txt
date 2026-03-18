@@ -3,7 +3,7 @@ CITATIONS
 This file contains the citations for the contents of this directory.
 
 ----------
-Login Background Image (login_background.png) 
+Login Background Image (login-background.png) 
 
 - This was an AI generated image used as the background image to our login page. This is not sourced from any third party
 - Created using open ai - GPT-5.4
