@@ -115,7 +115,7 @@ export class Backend {
         // TODO: check for successful addition to queue.
         // Waiting for final queuing logic.
 
-        let interval = 0;
+        session.interval = 0;
         let attempting = false;
 
         const attemptConnection = async () => {
@@ -130,11 +130,12 @@ export class Backend {
             const inGame = result.type === "success";
 
             if(inGame) {
-                clearInterval(interval);
+                const wsUrl = result.url;
+                clearInterval(session.interval);
                 // setup websocket connection
-                const ws = new WebSocket(this.server().url)
+                const ws = new WebSocket(wsUrl)
 
-                console.log(`Attempting connection to backend game server at ${ws.url}`)
+                console.log(`Attempting connection to backend game server at ${wsUrl}`)
 
                 ws.addEventListener('close', (ev: CloseEvent) => {
                     if (!ev.wasClean) {
@@ -155,7 +156,7 @@ export class Backend {
             attempting = false;
         }
 
-        setInterval(attemptConnection, POLL_TIME);
+        session.interval = setInterval(attemptConnection, POLL_TIME);
     }
 
     public createSession(user: string): Session {
@@ -163,8 +164,8 @@ export class Backend {
 
         this.findServers();
 
-        this.connectSession(session, user)
+        this.connectSession(session, user);
 
-        return session
+        return session;
     }
 }
