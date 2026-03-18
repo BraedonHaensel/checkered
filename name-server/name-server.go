@@ -139,9 +139,18 @@ func handleRegisterMatchmaker(w http.ResponseWriter, req *http.Request) {
 	url := data.URL
 	log.Println("POST /register/matchmaker -", url)
 
-	// Register the server
+	// Get the ID to assign to the server
 	id := getNextMatchmakerID()
 	matchmakerMu.Lock()
+	// Remove any old server entries from the same URL
+	for i, matchmaker := range matchmakers {
+		if matchmaker.URL == url {
+			matchmakers = append(matchmakers[:i],
+				matchmakers[i+1:]...)
+			break
+		}
+	}
+	// Add the new server entry
 	matchmakers = append(matchmakers, Server{id, url})
 	matchmakerMu.Unlock()
 
@@ -162,9 +171,18 @@ func handleRegisterGameServer(w http.ResponseWriter, req *http.Request) {
 	url := data.URL
 	log.Println("POST /register/game-server -", url)
 
-	// Register the server
+	// Get the ID to assign to the server
 	id := getNextGameServerID()
 	gameServerMu.Lock()
+	// Remove any old server entries from the same URL
+	for i, gameServer := range gameServers {
+		if gameServer.URL == url {
+			gameServers = append(gameServers[:i],
+				gameServers[i+1:]...)
+			break
+		}
+	}
+	// Add the new server entry
 	gameServers = append(gameServers, Server{id, url})
 	gameServerMu.Unlock()
 

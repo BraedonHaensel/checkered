@@ -50,7 +50,7 @@ func main() {
 	matchmaker.Register(url)
 
 	// Start a leader election
-	matchmaker.InitiateElection()
+	go matchmaker.InitiateElection()
 
 	// TODO get list of servers from Name Server before/at the start of the election
 	// And have a server refresh loop

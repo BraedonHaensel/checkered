@@ -160,7 +160,8 @@ func (m *Matchmaker) InitiateElection() {
 		case <-m.leaderTimer.C:
 			// Timer fired, so no leader(i) received. Something went wrong, so initiate
 			// a new election
-			m.InitiateElection()
+			log.Println("No leader(i) responses received")
+			go m.InitiateElection()
 		case <-m.leaderTimerChan:
 			// Received a leader(i) message. The message is handled by the leader(i)
 			// message handler, so return
@@ -245,7 +246,7 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 		m.sendBullyMessage(otherMatchmaker)
 		if !m.runningInElection {
 			// This server has a higher ID and isn't running yet, so start an election
-			m.InitiateElection()
+			go m.InitiateElection()
 		}
 	}
 }
