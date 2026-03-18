@@ -28,11 +28,14 @@ type Matchmaker struct {
 	nameServerURL string
 
 	// Other Matchmakers in the network
-	otherMatchmakers []Server
+	otherMatchmakers   []Server
+	otherMatchmakersMu sync.Mutex
 	// Whether this server is running in the current leader election
-	runningInElection bool
+	runningInElection   bool
+	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	leaderID int
+	leaderID   int
+	leaderIDMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
 	bullyTimerChan chan struct{}
@@ -93,7 +96,9 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 
 	// Set the list of known other Matchmakers
 	log.Println("Refreshed the list of other Matchmakers")
+	m.otherMatchmakersMu.Lock()
 	m.otherMatchmakers = otherMatchmakers
+	m.otherMatchmakersMu.Unlock()
 }
 
 // Deregisters another Matchmaker from the Name Server.
@@ -108,6 +113,7 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 	defer res.Body.Close()
 
 	// Filter the Matchmaker out of the list of other Matchmakers
+	m.otherMatchmakersMu.Lock()
 	for i, matchmaker := range m.otherMatchmakers {
 		if matchmaker.ID == otherMatchmakerID {
 			m.otherMatchmakers = append(m.otherMatchmakers[:i],
@@ -115,31 +121,42 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 			break
 		}
 	}
+	m.otherMatchmakersMu.Unlock()
 }
 
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
 	log.Println("Initiating a leader election")
+	m.runningInElectionMu.Lock()
 	m.runningInElection = true
+	m.runningInElectionMu.Unlock()
 	m.RefreshOtherMatchmakersList()
 
 	// Check which Matchmakers have a higher ID than this one
 	higherIDMatchmakers := []Server{}
+	m.otherMatchmakersMu.Lock()
 	for _, otherMatchmaker := range m.otherMatchmakers {
 		if otherMatchmaker.ID > m.ID {
 			higherIDMatchmakers = append(higherIDMatchmakers, otherMatchmaker)
 		}
 	}
+	m.otherMatchmakersMu.Unlock()
 
 	if len(higherIDMatchmakers) == 0 {
 		// This server has the highest ID, declare itself leader
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
+		m.leaderIDMu.Lock()
 		m.leaderID = m.ID
+		m.leaderIDMu.Unlock()
+		m.runningInElectionMu.Lock()
 		m.runningInElection = false
+		m.runningInElectionMu.Unlock()
 		log.Printf("Sending leader(%d) messages\n", m.ID)
+		m.otherMatchmakersMu.Lock()
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
+		m.otherMatchmakersMu.Unlock()
 		return
 	}
 
@@ -162,12 +179,18 @@ func (m *Matchmaker) InitiateElection() {
 	case <-m.bullyTimer.C:
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
+		m.leaderIDMu.Lock()
 		m.leaderID = m.ID
+		m.leaderIDMu.Unlock()
+		m.runningInElectionMu.Lock()
 		m.runningInElection = false
+		m.runningInElectionMu.Unlock()
 		log.Printf("Sending leader(%d) messages\n", m.ID)
+		m.otherMatchmakersMu.Lock()
 		for _, otherMatchmaker := range m.otherMatchmakers {
 			m.sendLeaderMessage(otherMatchmaker)
 		}
+		m.otherMatchmakersMu.Unlock()
 		return
 
 	case <-m.bullyTimerChan:
@@ -256,14 +279,18 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 	id := otherMatchmaker.ID
 
 	// Check if the message is from an unknown Matchmaker
+	m.otherMatchmakersMu.Lock()
 	if !slices.Contains(m.otherMatchmakers, otherMatchmaker) {
 		m.otherMatchmakers = append(m.otherMatchmakers, otherMatchmaker)
 	}
+	m.otherMatchmakersMu.Unlock()
 
 	if id < m.ID {
 		// Message received from a server with a lower ID, so bully them.
 		log.Printf("Received election(%d). Bullying as this Matchmaker's ID is higher: %d\n", id, m.ID)
 		m.sendBullyMessage(otherMatchmaker)
+		m.runningInElectionMu.Lock()
+		defer m.runningInElectionMu.Unlock()
 		if !m.runningInElection {
 			// This server has a higher ID and isn't running yet, so start an election
 			go m.InitiateElection()
@@ -290,14 +317,20 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	id := otherMatchmaker.ID
 
 	// Check if the message is from an unknown Matchmaker
+	m.otherMatchmakersMu.Lock()
 	if !slices.Contains(m.otherMatchmakers, otherMatchmaker) {
 		m.otherMatchmakers = append(m.otherMatchmakers, otherMatchmaker)
 	}
+	m.otherMatchmakersMu.Unlock()
 
 	// Set the new leader
 	log.Println("Received new leader ID:", id)
+	m.leaderIDMu.Lock()
 	m.leaderID = id
+	m.leaderIDMu.Unlock()
+	m.runningInElectionMu.Lock()
 	m.runningInElection = false
+	m.runningInElectionMu.Unlock()
 }
 
 // Handle an incoming bully() Bully leader election message.
