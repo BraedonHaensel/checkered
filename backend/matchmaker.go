@@ -9,7 +9,11 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+// -------------------- INITIAL ADMIN SET UP	 --------------------
 
 const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 
@@ -17,12 +21,21 @@ const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 // maintaining the leaderboard and handling all leaderboard requests
 type Matchmaker struct {
 	ID int
+	// we map username to client
+	clients map[string]*Client
+	// games that new clients are in
+	games          map[uuid.UUID]*Game
+	queue          Queue[*Client]
+	leaderboard    *Leaderboard
+	mu_leaderboard sync.Mutex
+
+	register     chan *Client
+	unregister   chan *Client
+	moveReceiver chan GameMove
+	gameResults  chan GameResult
+
 	// Fully qualified URL of this Matchmaker
 	URL string
-
-	mu_leaderboard sync.Mutex
-	leaderboard    Leaderboard
-	queue          Queue[*Client]
 
 	// URL of the Name Server
 	nameServerURL string
@@ -41,19 +54,27 @@ type Matchmaker struct {
 	leaderTimerChan chan struct{}
 }
 
-func NewMatchmaker(url, nameServerURL string) Matchmaker {
+func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[*Client]{}
 	InitQueue(&queue, 100)
-	return Matchmaker{
+	matchmaker := Matchmaker{
+		clients:        make(map[string]*Client),
+		games:          make(map[uuid.UUID]*Game),
+		queue:          queue,
+		leaderboard:    &Leaderboard{},
+		mu_leaderboard: sync.Mutex{},
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
+
 		URL:               url,
-		mu_leaderboard:    sync.Mutex{},
-		leaderboard:       Leaderboard{},
-		queue:             queue,
 		nameServerURL:     nameServerURL,
 		runningInElection: false,
 		otherMatchmakers:  []Server{},
 	}
+	return &matchmaker
 }
+
+// -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
 
 // Register with the Name Server
 func (m *Matchmaker) Register(url string) {
@@ -321,6 +342,8 @@ func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// -------------------- MATCHMAKING SERVER LOGIC --------------------
+
 // Handler for a request to join the queue
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 }
@@ -332,4 +355,143 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 // Handler for a request to leave the queue
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
+}
+
+// Initial Client connection with the matchmaking server handler
+func MatchmakerWs(matchmaker *Matchmaker, w http.ResponseWriter, r *http.Request) {
+
+	// upgrade to a websocket connection
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// get a message from the client indicating who they are
+	var registerMessage RegisterMessage
+	err = conn.ReadJSON(&registerMessage)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// create a new client for this request
+	client := NewClient(registerMessage.Username, conn, matchmaker.unregister, func(client *Client) {
+		matchmaker.register <- client
+	})
+	matchmaker.clients[client.username] = &client
+
+	go client.readThread()
+	go client.writeThread()
+
+	// Send confirmation of registration to client
+	confirmation_msg := ConfirmRegistration{Kind: "registered"}
+	confirmation, err := json.Marshal(confirmation_msg)
+	client.send <- confirmation
+
+	// let the server know and handle the new client
+	// server.register <- &client
+	log.Printf("Client \"%s\" connected to matchmaker server %s", client.username, matchmaker.URL)
+
+}
+
+// main idea of this loop is to register new active users and put them
+// into the server struct
+func (matchmaker *Matchmaker) ServerLoop() {
+	for {
+		select {
+		case client := <-matchmaker.register:
+			var inGameAlready bool
+			for _, game := range matchmaker.games {
+				if game.redPlayer.username == client.username {
+					// client is already in a game
+					inGameAlready = true
+				}
+				if game.blackPlayer.username == client.username {
+					// client is already in a game
+					inGameAlready = true
+				}
+			}
+			if inGameAlready {
+				break
+			}
+			if client.enqueued {
+				log.Printf("Client \"%s\" is already enqueued", client.username)
+			} else {
+				log.Printf("Client \"%s\" has joined the queue", client.username)
+				// queue the new client into a game
+				client.enqueued = true
+				matchmaker.queue.enqueue(client)
+				log.Println("Queue:")
+				matchmaker.queue.forEach(func(c *Client, i int) {
+					log.Printf("\t%d: %s", i, c.username)
+				})
+				log.Println("=================")
+			}
+		case unregister := <-matchmaker.unregister:
+			delete(matchmaker.clients, unregister.username)
+			RemoveValue(&matchmaker.queue, unregister)
+			log.Printf(
+				"Client \"%s\" deregistered",
+				unregister.username,
+			)
+			// TODO: remove client from game rooms
+		case gameResult := <-matchmaker.gameResults:
+			game, exists := matchmaker.games[gameResult.gameID]
+
+			if exists {
+				matchmaker.mu_leaderboard.Lock()
+				matchmaker.leaderboard.UpdateLeaderboard(gameResult)
+				matchmaker.mu_leaderboard.Unlock()
+
+				game.mu.Lock()
+				if game.blackPlayer != nil {
+					game.blackPlayer.currentGame = nil
+				}
+				if game.redPlayer != nil {
+					game.redPlayer.currentGame = nil
+				}
+				game.mu.Unlock()
+				delete(matchmaker.games, gameResult.gameID)
+			}
+		default:
+			if matchmaker.queue.size < 2 {
+				break
+			}
+			redPlayer := matchmaker.queue.dequeue()
+			blackPlayer := matchmaker.queue.dequeue()
+			redPlayer.enqueued = false
+			blackPlayer.enqueued = false
+			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
+			gameRoom := Game{
+				gameID:        uuid.New(),
+				redPlayer:     redPlayer,
+				blackPlayer:   blackPlayer,
+				tileStates:    generateInitialTileStates(),
+				turn:          Red,
+				previousMoves: make([]GameMove, 0),
+				resultChan:    matchmaker.gameResults,
+				mu:            sync.Mutex{},
+			}
+			matchmaker.games[gameRoom.gameID] = &gameRoom
+			// tell both servers about the new game
+			redMessage := gameRoom.messageFromNewGame("red", blackPlayer.username)
+			blackMessage := gameRoom.messageFromNewGame("black", redPlayer.username)
+			redBytes, err := json.Marshal(redMessage)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			blackBytes, err := json.Marshal(blackMessage)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			matchmaker.clients[gameRoom.blackPlayer.username].currentGame = &gameRoom
+			matchmaker.clients[gameRoom.redPlayer.username].currentGame = &gameRoom
+			// send the message that they have found a game to both players
+			matchmaker.clients[gameRoom.blackPlayer.username].send <- blackBytes
+			matchmaker.clients[gameRoom.redPlayer.username].send <- redBytes
+		}
+	}
 }
