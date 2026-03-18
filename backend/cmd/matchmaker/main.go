@@ -55,8 +55,20 @@ func main() {
 	// TODO get list of servers from Name Server before/at the start of the election
 	// And have a server refresh loop
 
-	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
+	err := http.ListenAndServe(*addr, LeaderMiddleware(&matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if matchmaker.IsLeader() {
+			log.Println("URL: ", r.URL.Path);
+			next.ServeHTTP(w,r);
+			return;
+		}
+		
+		http.Redirect(w, r, r.URL.Scheme + matchmaker.GetLeader().URL + r.URL.Path, http.StatusTemporaryRedirect)
+	})
 }

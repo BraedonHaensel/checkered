@@ -69,6 +69,20 @@ func (m *Matchmaker) Register(url string) {
 	log.SetPrefix(fmt.Sprintf("[%d] ", m.ID))
 }
 
+func (m *Matchmaker) IsLeader() bool {
+	return m.ID == m.leaderID;
+}
+
+func (m *Matchmaker) GetLeader() *Server {
+	for _, other := range m.otherMatchmakers {
+		if other.ID == m.leaderID {
+			return &other;
+		}
+	}
+
+	panic("No leader found!");
+}
+
 // Refreshes and sets the list of known other Matchmakers.
 func (m *Matchmaker) RefreshOtherMatchmakersList() {
 	// Get the list of all Matchmakers from the Name Server
