@@ -110,13 +110,18 @@ export class Backend {
         this.current = null
     }
 
-    private connectSession(session: Session, user: string) {
+    private async connectSession(session: Session, user: string) {
+        await fetch(`${this.server().url}/queue/add`);
+        // TODO: check for successful addition to queue.
+        // Waiting for final queuing logic.
+
         let interval = 0;
         let attempting = false;
+
         const attemptConnection = async () => {
             if(attempting) return;
             attempting = true;
-            const raw = await fetch(`${this.server().url}/newGame`);
+            const raw = await fetch(`${this.server().url}/queue/poll`);
             const result = await raw.json();
 
             // TODO: We assume the shape of the resulting json 
