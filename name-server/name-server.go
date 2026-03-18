@@ -106,6 +106,7 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 
 // GET /matchmakers - Gets the list of known Matchmaker servers.
 func handleGetMatchmakers(w http.ResponseWriter, req *http.Request) {
+	log.Println("Matchmakers: ", len(matchmakers))
 	jsonData, err := json.Marshal(matchmakers)
 	if err != nil {
 		log.Fatal(err)

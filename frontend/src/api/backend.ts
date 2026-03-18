@@ -2,16 +2,16 @@ import type { Request, Response } from './request'
 import { Session } from './session'
 
 export type BackendServer = {
-    apiUrl: string
-    wsUrl: string
-    priority: number
+    url: string
+    id: number
 }
 
-const defaultTestingServer: BackendServer = {
-    apiUrl: 'http://localhost:8080/api',
-    wsUrl: 'ws://localhost:8080/ws',
-    priority: 1,
+const nameServer: BackendServer = {
+    url: 'http://localhost:9000/',
+    id: 0,
 }
+
+const POLL_TIME = 500;
 
 export class Backend {
     private static _instance: Backend | null = null
@@ -33,7 +33,7 @@ export class Backend {
         type: RequestType,
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
-        const url = `${this.server().apiUrl}/${type}`
+        const url = `${this.server().url}/${type}`
         let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
@@ -58,7 +58,7 @@ export class Backend {
         type: RequestType,
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
-        const url = `${this.server().apiUrl}/${type}`
+        const url = `${this.server().url}/${type}`
         let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
@@ -79,8 +79,11 @@ export class Backend {
         return (await raw.json()) as Extract<Response, { type: RequestType }>
     }
 
-    private findServers() {
-        this.servers = [defaultTestingServer]
+    private async findServers() {
+        const raw = await fetch(nameServer.url + "/matchmakers")
+        const servers = await raw.json() as BackendServer[];
+
+        this.servers = servers;
     }
 
     public server(): BackendServer {
@@ -108,28 +111,52 @@ export class Backend {
     }
 
     private connectSession(session: Session, user: string) {
-        const ws = new WebSocket(this.server().wsUrl)
+        let interval = 0;
+        let attempting = false;
+        const attemptConnection = async () => {
+            if(attempting) return;
+            attempting = true;
+            const raw = await fetch(`${this.server().url}/newGame`);
+            const result = await raw.json();
 
-        console.log('Attempting connection to backend server')
+            // TODO: We assume the shape of the resulting json 
+            // object for now.
 
-        ws.addEventListener('close', (ev: CloseEvent) => {
-            if (!ev.wasClean) {
-                this.connectSession(session, user)
+            const inGame = result.type === "success";
+
+            if(inGame) {
+                clearInterval(interval);
+                // setup websocket connection
+                const ws = new WebSocket(this.server().url)
+
+                console.log(`Attempting connection to backend game server at ${ws.url}`)
+
+                ws.addEventListener('close', (ev: CloseEvent) => {
+                    if (!ev.wasClean) {
+                        this.connectSession(session, user)
+                    }
+                })
+
+                ws.addEventListener('error', (err) => {
+                    console.log('Error Callback', err.type)
+                    ws.close()
+                })
+
+                ws.addEventListener('open', () => {
+                    session.connect(ws, user)
+                })
             }
-        })
 
-        ws.addEventListener('error', (err) => {
-            console.log('Error Callback', err.type)
-            ws.close()
-        })
+            attempting = false;
+        }
 
-        ws.addEventListener('open', () => {
-            session.connect(ws, user)
-        })
+        setInterval(attemptConnection, POLL_TIME);
     }
 
     public createSession(user: string): Session {
         const session = new Session()
+
+        this.findServers();
 
         this.connectSession(session, user)
 
