@@ -66,7 +66,7 @@ func (m *Matchmaker) Register(url string) {
 	log.SetPrefix(fmt.Sprintf("[%d] ", m.ID))
 }
 
-// Refreshes the list of known other Matchmakers.
+// Refreshes and sets the list of known other Matchmakers.
 func (m *Matchmaker) RefreshOtherMatchmakersList() {
 	// Get the list of all Matchmakers from the Name Server
 	matchmakers, err := SendServerListRequest(m.nameServerURL + "/matchmakers")
@@ -91,6 +91,7 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 		log.Fatalf("Matchmaker %d failed to find itself in the Name Server's list of Matchmakers", m.ID)
 	}
 
+	// Set the list of known other Matchmakers
 	log.Println("Refreshed the list of other Matchmakers")
 	m.otherMatchmakers = otherMatchmakers
 }
@@ -180,7 +181,7 @@ func (m *Matchmaker) InitiateElection() {
 			// Timer fired, so no leader(i) received. Something went wrong, so initiate
 			// a new election
 			log.Println("No leader(i) responses received")
-			go m.InitiateElection()
+			m.InitiateElection()
 		case <-m.leaderTimerChan:
 			// Received a leader(i) message. The message is handled by the leader(i)
 			// message handler, so return
