@@ -265,7 +265,7 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send an election(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -287,7 +287,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send a leader(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -299,7 +299,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 // Sends a bully() message to another Matchmaker.
 func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 	// Send a bully() message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/bully", "application/json", nil)
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/bully", "application/json", nil)
 	if err != nil {
 		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)

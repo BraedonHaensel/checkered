@@ -36,13 +36,13 @@ func main() {
 	})
 
 	// Leader election endpoints
-	http.HandleFunc("POST /leader-election/election", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/election", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleElectionRequest(w, r)
 	})
-	http.HandleFunc("POST /leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleBullyRequest(w, r)
 	})
-	http.HandleFunc("POST /leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
@@ -64,7 +64,7 @@ func main() {
 
 func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "leader-election") || matchmaker.IsLeader() {
+		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
 			log.Println("URL: ", r.URL.Path);
 			next.ServeHTTP(w,r);
 			return;
