@@ -9,7 +9,11 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+// -------------------- INITIAL ADMIN SET UP	 --------------------
 
 const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 
@@ -17,12 +21,16 @@ const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 // maintaining the leaderboard and handling all leaderboard requests
 type Matchmaker struct {
 	ID int
+	// games that new clients are in
+	matches        map[uuid.UUID]*Match
+	mu_matches     sync.Mutex
+	queue          Queue[string]
+	mu_queue       sync.Mutex
+	leaderboard    *Leaderboard
+	mu_leaderboard sync.Mutex
+
 	// Fully qualified URL of this Matchmaker
 	URL string
-
-	mu_leaderboard sync.Mutex
-	leaderboard    Leaderboard
-	queue          Queue[*Client]
 
 	// URL of the Name Server
 	nameServerURL string
@@ -44,19 +52,24 @@ type Matchmaker struct {
 	leaderTimerChan chan struct{}
 }
 
-func NewMatchmaker(url, nameServerURL string) Matchmaker {
-	queue := Queue[*Client]{}
+func NewMatchmaker(url, nameServerURL string) *Matchmaker {
+	queue := Queue[string]{}
 	InitQueue(&queue, 100)
-	return Matchmaker{
+	matchmaker := Matchmaker{
+		matches:        make(map[uuid.UUID]*Match),
+		queue:          queue,
+		leaderboard:    &Leaderboard{},
+		mu_leaderboard: sync.Mutex{},
+
 		URL:               url,
-		mu_leaderboard:    sync.Mutex{},
-		leaderboard:       Leaderboard{},
-		queue:             queue,
 		nameServerURL:     nameServerURL,
 		runningInElection: false,
 		otherMatchmakers:  []Server{},
 	}
+	return &matchmaker
 }
+
+// -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
 
 // Register with the Name Server
 func (m *Matchmaker) Register(url string) {
@@ -379,6 +392,8 @@ func (m *Matchmaker) HandleBullyRequest(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// -------------------- MATCHMAKING SERVER LOGIC --------------------
+
 func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(m.leaderboard)
 	if err != nil {
@@ -389,15 +404,301 @@ func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type QueueRequest struct {
+	Username string `json:"username"`
+}
+
+type QueueResponse struct {
+	Type string `json:"type"`
+}
+
+type PollResponse struct {
+	Type string `json:"type"`
+	URL  string `json:"url,omitempty"`
+}
+
+type EndMatchRequest struct {
+	MatchID uuid.UUID `json:"match_id"`
+}
+
+type EndMatchResponse struct {
+	Type string `json:"type"`
+}
+
+// Fix - export the fields and add json tags
+type GameResultStruct struct {
+	GameID uuid.UUID `json:"game_id"`
+	Winner string    `json:"winner"`
+	Loser  string    `json:"loser"`
+}
+
+type Match struct {
+	MatchID     uuid.UUID
+	RedPlayer   string
+	BlackPlayer string
+	gameserver  string
+}
+
+func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
+
+	// Get all available game servers
+	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+	if err != nil {
+		log.Printf("Failed to fetch game servers: %s", err)
+		return Match{}, err
+	}
+
+	if len(gameServers) == 0 {
+		log.Println("No game servers available")
+		return Match{}, fmt.Errorf("no game servers available")
+	}
+
+	// Pick the first one
+	gameServer := gameServers[0]
+	log.Printf("Picked game server: %s (ID: %d)", gameServer.URL, gameServer.ID)
+
+	return Match{
+		MatchID:     uuid.New(),
+		RedPlayer:   redPlayer,
+		BlackPlayer: blackPlayer,
+		gameserver:  gameServer.URL,
+	}, nil
+}
+
 // Handler for a request to join the queue
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
+
+	// Reading the data in the request
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Extracting the username
+	username := data.Username
+
+	// Check if user is already in queue
+	alreadyQueued := false
+	m.mu_queue.Lock()
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			alreadyQueued = true
+		}
+	})
+	m.mu_queue.Unlock()
+
+	if alreadyQueued {
+		log.Printf("Player \"%s\" already in queue", username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+		return
+	}
+
+	// Enqueue the user
+	m.mu_queue.Lock()
+	m.queue.enqueue(username)
+	log.Printf("Adding \"%s\" to queue", username)
+
+	// Matchmaking logic
+	if m.queue.size >= 2 {
+		redPlayer := m.queue.dequeue()
+		blackPlayer := m.queue.dequeue()
+		m.mu_queue.Unlock()
+		match, err := m.NewMatch(redPlayer, blackPlayer)
+		if err != nil {
+			log.Printf("Failed to create match: %s", err)
+			return
+		}
+		m.mu_matches.Lock()
+		m.matches[match.MatchID] = &match
+		m.mu_matches.Unlock()
+
+		// Marshal the match to JSON
+		matchBytes, err := json.Marshal(match)
+		if err != nil {
+			log.Printf("Failed to marshal match: %s", err)
+			return
+		}
+
+		// Send a POST request to the game server with the match details
+		res, err := http.Post(match.gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+		if err != nil {
+			log.Printf("Failed to send match to game server %s: %s", match.gameserver, err)
+			return
+		}
+		defer res.Body.Close()
+
+		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
+	}
+
+	// Let the user know they're in queue
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+
 }
 
 // Handler for a request for a users status on the queue will respond with still
 // in the queue or will respond with a new found match
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
+
+	// Reading the data in the request
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Extracting the username
+	username := data.Username
+	m.mu_matches.Lock()
+
+	// Check if the user is in a match
+	for _, match := range m.matches {
+		if match.RedPlayer == username || match.BlackPlayer == username {
+			m.mu_matches.Unlock()
+			// User has been matched, return the game server URL
+			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.gameserver)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.gameserver})
+			return
+		}
+	}
+
+	// Check if user is already in queue
+	m.mu_queue.Lock()
+	alreadyQueued := false
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			alreadyQueued = true
+		}
+	})
+	m.mu_queue.Unlock()
+
+	if alreadyQueued {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PollResponse{Type: "In Queue"})
+		return
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PollResponse{Type: "Not In Queue"})
+		return
+	}
+
+}
+
+// helper function to LeaveQueueRequest to remove value from the queue
+func RemoveStringValue(q *Queue[string], value string) {
+	originalSize := q.size
+	for i := 0; i < originalSize; i++ {
+		v := q.dequeue()
+		if v != value {
+			q.enqueue(v)
+		}
+	}
 }
 
 // Handler for a request to leave the queue
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
+
+	// Reading the data in the reuest
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	username := data.Username
+
+	// Check if user is actually in the queue
+	m.mu_queue.Lock()
+	inQueue := false
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			inQueue = true
+		}
+	})
+	m.mu_queue.Unlock()
+
+	if !inQueue {
+		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(QueueResponse{Type: "Not In Queue"})
+		return
+	}
+	m.mu_queue.Lock()
+	RemoveStringValue(&m.queue, username)
+	m.mu_queue.Unlock()
+	log.Printf("User \"%s\" left the queue", username)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
+
+}
+
+// Handler for a request to update the leaderboard
+func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
+
+	data, err, errStatus := parseJsonRequestData[GameResultStruct](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Update the leaderboard
+	m.mu_leaderboard.Lock()
+	m.leaderboard.AddPlayerToLeaderboard(data.Winner)
+	m.leaderboard.AddPlayerToLeaderboard(data.Loser)
+	for i := range m.leaderboard.Board {
+		if m.leaderboard.Board[i].Username == data.Winner {
+			m.leaderboard.Board[i].Wins++
+		}
+		if m.leaderboard.Board[i].Username == data.Loser {
+			m.leaderboard.Board[i].Losses++
+		}
+	}
+	m.mu_leaderboard.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "leaderboard updated"})
+}
+
+// Handler for a request to end a matchup
+func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[EndMatchRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	matchID := data.MatchID
+
+	// Check if the match exists
+	m.mu_matches.Lock()
+	_, exists := m.matches[matchID]
+	if !exists {
+		m.mu_matches.Unlock()
+		log.Printf("EndMatch: match %s not found", matchID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(EndMatchResponse{Type: "match not found"})
+		return
+	}
+
+	// Remove the match
+	delete(m.matches, matchID)
+	m.mu_matches.Unlock()
+	log.Printf("Match %s ended and removed", matchID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "match Removed"})
 }

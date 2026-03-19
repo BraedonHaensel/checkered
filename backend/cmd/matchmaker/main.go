@@ -9,15 +9,22 @@ import (
 	Checkered "github.com/akeuben/checkered"
 )
 
+// Setting local addresses including the default nameserver
 var (
 	addr          = flag.String("addr", ":4000", "http service address")
 	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
 )
 
 func main() {
+
+	// Reading command line
 	flag.Parse()
 	url := Checkered.GetFullURL(*addr)
+
+	// Instantiating a new matchmaker object
 	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
+
+	// ---------------------------------------------
 
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
@@ -34,6 +41,16 @@ func main() {
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
+
+	http.HandleFunc("POST /match/updateleaderboard", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.UpdateLeaderboard(w, r)
+	})
+
+	http.HandleFunc("POST /match/end", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.EndMatch(w, r)
+	})
+
+	// --------------------------------------------
 
 	// Leader election endpoints
 	http.HandleFunc("POST /internal/leader-election/election", func(w http.ResponseWriter, r *http.Request) {
