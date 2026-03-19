@@ -499,10 +499,12 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	// Enqueue the user
 	m.mu_queue.Lock()
 	m.queue.enqueue(username)
+	m.mu_queue.Unlock()
 	log.Printf("Adding \"%s\" to queue", username)
 
 	// Matchmaking logic
 	if m.queue.size >= 2 {
+		m.mu_queue.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
 		m.mu_queue.Unlock()
@@ -560,6 +562,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	m.mu_matches.Unlock()
 
 	// Check if user is already in queue
 	m.mu_queue.Lock()

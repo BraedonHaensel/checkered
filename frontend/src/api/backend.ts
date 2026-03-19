@@ -124,6 +124,8 @@ export class Backend {
         // TODO: check for successful addition to queue.
         // Waiting for final queuing logic.
 
+        console.log("Added!");
+
         session.interval = 0;
         let attempting = false;
 
@@ -135,7 +137,7 @@ export class Backend {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                method: "GET"
+                method: "POST"
             });
             const result = await raw.json();
 
