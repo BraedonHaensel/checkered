@@ -56,10 +56,10 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[string]{}
 	InitQueue(&queue, 100)
 	matchmaker := Matchmaker{
-		matches:        make(map[uuid.UUID]*Match),
-		queue:          queue,
-		leaderboard:    &Leaderboard{
-			Board: 		make([]LeaderboardEntry, 0),
+		matches: make(map[uuid.UUID]*Match),
+		queue:   queue,
+		leaderboard: &Leaderboard{
+			Board: make([]LeaderboardEntry, 0),
 		},
 		mu_leaderboard: sync.Mutex{},
 
@@ -549,7 +549,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
-	username := r.URL.Query().Get("username");
+	username := r.URL.Query().Get("username")
 	m.mu_matches.Lock()
 
 	// Check if the user is in a match
@@ -649,6 +649,7 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
+	log.Printf("Game Result: (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
 
 	// Update the leaderboard
 	m.mu_leaderboard.Lock()

@@ -26,6 +26,7 @@ type PendingGame struct {
 	match       Match
 	blackClient *Client
 	redClient   *Client
+	mu          sync.Mutex
 }
 
 type GameServer struct {
@@ -122,6 +123,42 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	// let the server know and handle the new client
 	// server.register <- &client
 	log.Printf("Client \"%s\" connected", client.username)
+	// Find the game the user is attached to
+	var pendingGame *PendingGame = nil
+	var opponent *Client = nil
+	for _, pg := range server.pendingGames {
+		if pg.match.BlackPlayer == client.username {
+			pendingGame = pg
+			pendingGame.mu.Lock()
+			defer pendingGame.mu.Unlock()
+			pendingGame.blackClient = &client
+			opponent = pg.redClient
+			break
+		}
+		if pg.match.RedPlayer == client.username {
+			pendingGame = pg
+			pendingGame.mu.Lock()
+			defer pendingGame.mu.Unlock()
+			pendingGame.redClient = &client
+			opponent = pendingGame.blackClient
+			break
+		}
+	}
+	log.Printf("Game Identified %s\n", pendingGame.match.MatchID)
+	if pendingGame == nil {
+		log.Printf("Player %s is not in a pending game\n", client.username)
+		return
+	}
+
+	// If the other player hasn't registered start a timeout
+	if opponent == nil {
+		// TODO: Start forfeit timeout
+		log.Println("Waiting for opponent")
+		return
+	}
+	// If the other player has registered start the game
+	log.Printf("Starting game: %s", pendingGame.match.MatchID)
+	server.StartGame(pendingGame)
 }
 
 func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
@@ -135,8 +172,10 @@ func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
 		match:       match,
 		redClient:   nil,
 		blackClient: nil,
+		mu:          sync.Mutex{},
 	}
 	server.pendingGames[uuid] = &pendingGame
+	log.Printf("Created pending game: %s", uuid)
 }
 
 func (server *GameServer) StartGame(pendingGame *PendingGame) {
@@ -162,6 +201,7 @@ func (server *GameServer) StartGame(pendingGame *PendingGame) {
 		mu:            sync.Mutex{},
 	}
 	server.games[gameRoom.gameID] = &gameRoom
+	log.Println("Game room created")
 	// tell both servers about the new game
 	redMessage := gameRoom.messageFromNewGame("red", match.BlackPlayer)
 	blackMessage := gameRoom.messageFromNewGame("black", match.RedPlayer)
@@ -263,7 +303,7 @@ func (server *GameServer) ServerLoop() {
 					break
 				}
 				res, err := http.Post(
-					matchmakingServer.URL+"/",
+					matchmakingServer.URL+"/match/updateleaderboard",
 					"application/json",
 					bytes.NewBuffer(gameResultBytes),
 				)
@@ -271,8 +311,22 @@ func (server *GameServer) ServerLoop() {
 					log.Printf("Failed to send game results to match making server: %s", err)
 					break
 				}
-				defer res.Body.Close()
 				log.Printf("Leaderboard updated!")
+				defer res.Body.Close()
+				endMatchRequest := EndMatchRequest{MatchID: gameResult.gameID}
+				endMatchRequestBytes, err := json.Marshal(endMatchRequest)
+				if err != nil {
+					log.Printf("Failed to marshal end game request: %s", err)
+					return
+				}
+				res, err = http.Post(
+					matchmakingServer.URL+"/match/end",
+					"application/json",
+					bytes.NewBuffer(endMatchRequestBytes),
+				)
+				if err != nil {
+					log.Printf("Failed to send end game %s", err)
+				}
 
 				delete(server.games, gameResult.gameID)
 			} else {
