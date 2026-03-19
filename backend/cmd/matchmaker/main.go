@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 
 	Checkered "github.com/akeuben/checkered"
@@ -23,7 +25,7 @@ func main() {
 		matchmaker.GetLeaderboard(w, r)
 	})
 
-	http.HandleFunc("/queue/add", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /queue/add", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.AddToQueue(w, r)
 	})
 
@@ -72,8 +74,30 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			next.ServeHTTP(w,r);
 			return;
 		}
+
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		http.Redirect(w, r, r.URL.Scheme + matchmaker.Leader.URL + r.URL.Path, http.StatusTemporaryRedirect)
+		newUrl, err := url.Parse(r.URL.Scheme + matchmaker.Leader.URL)
+
+		if err != nil {
+			println("Error, could not parse leader url")
+		}
+		
+		proxy := httputil.NewSingleHostReverseProxy(newUrl)
+
+		proxy.ErrorHandler = func (w http.ResponseWriter, r *http.Request, err error) {
+			log.Println("Failed to contact leader, initiating election...");
+			matchmaker.InitiateElection();
+			// TODO: Resend the request that failed to reach the leader.
+		};
+
+		proxy.ServeHTTP(w, r);
 	})
 }

@@ -33,7 +33,7 @@ export class Backend {
         type: RequestType,
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
-        const url = `${this.server().url}/${type}`
+        const url = `${(await this.server()).url}/${type}`
         let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
@@ -58,7 +58,7 @@ export class Backend {
         type: RequestType,
         payload: Omit<Extract<Request, { type: RequestType }>, 'type'>
     ): Promise<Extract<Response, { type: RequestType }>> {
-        const url = `${this.server().url}/${type}`
+        const url = `${(await this.server()).url}/${type}`
         let raw: globalThis.Response | undefined = undefined
         try {
             raw = await fetch(url, {
@@ -84,15 +84,16 @@ export class Backend {
         const servers = await raw.json() as BackendServer[];
 
         this.servers = servers;
+        console.log(servers);
     }
 
-    public server(): BackendServer {
+    public async server(): Promise<BackendServer> {
         if (this.current !== null) {
             return this.current
         }
 
         if (this.servers.length == 0) {
-            this.findServers()
+            await this.findServers()
         }
 
         const best = this.servers.shift()
@@ -111,7 +112,7 @@ export class Backend {
     }
 
     private async connectSession(session: Session, user: string) {
-        await fetch(`${this.server().url}/queue/add`, {
+        await fetch(`${(await this.server()).url}/queue/add`, {
             body: JSON.stringify({
                 username: user,
             }),
@@ -129,7 +130,7 @@ export class Backend {
         const attemptConnection = async () => {
             if(attempting) return;
             attempting = true;
-            const raw = await fetch(`${this.server().url}/queue/poll`, {
+            const raw = await fetch(`${(await this.server()).url}/queue/poll`, {
                 body: JSON.stringify({
                     username: user,
                 }),
