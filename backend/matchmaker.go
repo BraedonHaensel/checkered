@@ -308,7 +308,7 @@ func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 // Handle an incoming election(i) Bully leader election message.
 func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Request) {
 	// Parse the elected Matchmaker's ID from the request
-	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
+	otherMatchmaker, err, errStatus := ParseJsonRequestData[Server](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -346,7 +346,7 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse the Matchmaker's ID from the request
-	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
+	otherMatchmaker, err, errStatus := ParseJsonRequestData[Server](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -443,7 +443,7 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the reuest
-	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -513,7 +513,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
-	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -571,7 +571,7 @@ func RemoveStringValue(q *Queue[string], value string) {
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the reuest
-	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
