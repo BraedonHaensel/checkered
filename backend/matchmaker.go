@@ -58,7 +58,9 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	matchmaker := Matchmaker{
 		matches:        make(map[uuid.UUID]*Match),
 		queue:          queue,
-		leaderboard:    &Leaderboard{},
+		leaderboard:    &Leaderboard{
+			Board: 		make([]LeaderboardEntry, 0),
+		},
 		mu_leaderboard: sync.Mutex{},
 
 		URL:               url,
