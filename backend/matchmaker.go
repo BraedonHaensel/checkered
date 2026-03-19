@@ -34,7 +34,7 @@ type Matchmaker struct {
 	runningInElection   bool
 	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	leaderID   int
+	Leader   Server
 	leaderIDMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
@@ -70,17 +70,7 @@ func (m *Matchmaker) Register(url string) {
 }
 
 func (m *Matchmaker) IsLeader() bool {
-	return m.ID == m.leaderID;
-}
-
-func (m *Matchmaker) GetLeader() *Server {
-	for _, other := range m.otherMatchmakers {
-		if other.ID == m.leaderID {
-			return &other;
-		}
-	}
-
-	panic("No leader found!");
+	return m.ID == m.Leader.ID;
 }
 
 // Refreshes and sets the list of known other Matchmakers.
@@ -160,7 +150,10 @@ func (m *Matchmaker) InitiateElection() {
 		// This server has the highest ID, declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			URL: 	m.URL,
+			ID: 	m.ID,
+		}
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -210,7 +203,10 @@ func (m *Matchmaker) InitiateElection() {
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			ID: 	m.ID,
+			URL: 	m.URL,
+		};
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -354,7 +350,6 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	id := otherMatchmaker.ID
 
 	// Check if the message is from an unknown Matchmaker
 	m.otherMatchmakersMu.Lock()
@@ -365,8 +360,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 
 	// Set the new leader
 	m.leaderIDMu.Lock()
-	log.Println("Received a new leader ID:", id)
-	m.leaderID = id
+	log.Println("Received a new leader ID:", otherMatchmaker.ID)
+	m.Leader = otherMatchmaker;
 	m.leaderIDMu.Unlock()
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false

@@ -64,12 +64,16 @@ func main() {
 
 func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If this is the leader server, or an internal route, that is, a route that is
+		// destined for this server specifically (for cross-matchmaker communication), 
+		// then we handle the request locally.
 		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
-			log.Println("URL: ", r.URL.Path);
+			log.Println("Handling reuqest locally for endpoint:", r.URL.Path);
 			next.ServeHTTP(w,r);
 			return;
 		}
 		
+		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
 		http.Redirect(w, r, r.URL.Scheme + matchmaker.GetLeader().URL + r.URL.Path, http.StatusTemporaryRedirect)
 	})
 }
