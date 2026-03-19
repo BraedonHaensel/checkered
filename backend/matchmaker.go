@@ -23,7 +23,9 @@ type Matchmaker struct {
 	ID int
 	// games that new clients are in
 	matches        map[uuid.UUID]*Match
+	mu_matches     sync.Mutex
 	queue          Queue[string]
+	mu_queue       sync.Mutex
 	leaderboard    *Leaderboard
 	mu_leaderboard sync.Mutex
 
@@ -40,7 +42,7 @@ type Matchmaker struct {
 	runningInElection   bool
 	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	leaderID   int
+	Leader     Server
 	leaderIDMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
@@ -78,6 +80,10 @@ func (m *Matchmaker) Register(url string) {
 	m.ID = id
 	log.Println("Registered with ID:", m.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", m.ID))
+}
+
+func (m *Matchmaker) IsLeader() bool {
+	return m.ID == m.Leader.ID
 }
 
 // Refreshes and sets the list of known other Matchmakers.
@@ -157,7 +163,10 @@ func (m *Matchmaker) InitiateElection() {
 		// This server has the highest ID, declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			ID:  m.ID,
+			URL: m.URL,
+		}
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -207,7 +216,10 @@ func (m *Matchmaker) InitiateElection() {
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			ID:  m.ID,
+			URL: m.URL,
+		}
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -262,7 +274,7 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send an election(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -284,7 +296,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send a leader(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -296,7 +308,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 // Sends a bully() message to another Matchmaker.
 func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 	// Send a bully() message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/bully", "application/json", nil)
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/bully", "application/json", nil)
 	if err != nil {
 		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
@@ -308,7 +320,7 @@ func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 // Handle an incoming election(i) Bully leader election message.
 func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Request) {
 	// Parse the elected Matchmaker's ID from the request
-	otherMatchmaker, err, errStatus := ParseJsonRequestData[Server](r)
+	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -346,12 +358,11 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse the Matchmaker's ID from the request
-	otherMatchmaker, err, errStatus := ParseJsonRequestData[Server](r)
+	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	id := otherMatchmaker.ID
 
 	// Check if the message is from an unknown Matchmaker
 	m.otherMatchmakersMu.Lock()
@@ -362,8 +373,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 
 	// Set the new leader
 	m.leaderIDMu.Lock()
-	log.Println("Received a new leader ID:", id)
-	m.leaderID = id
+	log.Println("Received a new leader ID:", otherMatchmaker.ID)
+	m.Leader = otherMatchmaker
 	m.leaderIDMu.Unlock()
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
@@ -381,6 +392,8 @@ func (m *Matchmaker) HandleBullyRequest(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// -------------------- MATCHMAKING SERVER LOGIC --------------------
+
 func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(m.leaderboard)
 	if err != nil {
@@ -390,8 +403,6 @@ func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-// -------------------- MATCHMAKING SERVER LOGIC --------------------
 
 type QueueRequest struct {
 	Username string `json:"username"`
@@ -404,6 +415,21 @@ type QueueResponse struct {
 type PollResponse struct {
 	Type string `json:"type"`
 	URL  string `json:"url,omitempty"`
+}
+
+type EndMatchRequest struct {
+	MatchID uuid.UUID `json:"match_id"`
+}
+
+type EndMatchResponse struct {
+	Type string `json:"type"`
+}
+
+// Fix - export the fields and add json tags
+type GameResultStruct struct {
+	GameID uuid.UUID `json:"game_id"`
+	Winner string    `json:"winner"`
+	Loser  string    `json:"loser"`
 }
 
 type Match struct {
@@ -442,8 +468,8 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 // Handler for a request to join the queue
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
-	// Reading the data in the reuest
-	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
+	// Reading the data in the request
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -454,11 +480,13 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is already in queue
 	alreadyQueued := false
+	m.mu_queue.Lock()
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			alreadyQueued = true
 		}
 	})
+	m.mu_queue.Unlock()
 
 	if alreadyQueued {
 		log.Printf("Player \"%s\" already in queue", username)
@@ -469,6 +497,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue the user
+	m.mu_queue.Lock()
 	m.queue.enqueue(username)
 	log.Printf("Adding \"%s\" to queue", username)
 
@@ -476,12 +505,15 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	if m.queue.size >= 2 {
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
+		m.mu_queue.Unlock()
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
 			log.Printf("Failed to create match: %s", err)
 			return
 		}
+		m.mu_matches.Lock()
 		m.matches[match.MatchID] = &match
+		m.mu_matches.Unlock()
 
 		// Marshal the match to JSON
 		matchBytes, err := json.Marshal(match)
@@ -513,7 +545,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
-	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -521,10 +553,12 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Extracting the username
 	username := data.Username
+	m.mu_matches.Lock()
 
 	// Check if the user is in a match
 	for _, match := range m.matches {
 		if match.RedPlayer == username || match.BlackPlayer == username {
+			m.mu_matches.Unlock()
 			// User has been matched, return the game server URL
 			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.gameserver)
 			w.Header().Set("Content-Type", "application/json")
@@ -535,12 +569,14 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user is already in queue
+	m.mu_queue.Lock()
 	alreadyQueued := false
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			alreadyQueued = true
 		}
 	})
+	m.mu_queue.Unlock()
 
 	if alreadyQueued {
 		w.Header().Set("Content-Type", "application/json")
@@ -571,7 +607,7 @@ func RemoveStringValue(q *Queue[string], value string) {
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the reuest
-	data, err, errStatus := ParseJsonRequestData[QueueRequest](r)
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
@@ -580,12 +616,14 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	username := data.Username
 
 	// Check if user is actually in the queue
+	m.mu_queue.Lock()
 	inQueue := false
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			inQueue = true
 		}
 	})
+	m.mu_queue.Unlock()
 
 	if !inQueue {
 		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
@@ -594,12 +632,73 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(QueueResponse{Type: "Not In Queue"})
 		return
 	}
-
+	m.mu_queue.Lock()
 	RemoveStringValue(&m.queue, username)
-	log.Printf("User \"%s\" left the queue (size: %d)", username, m.queue.size)
+	m.mu_queue.Unlock()
+	log.Printf("User \"%s\" left the queue", username)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
 
+}
+
+// Handler for a request to update the leaderboard
+func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
+
+	data, err, errStatus := parseJsonRequestData[GameResultStruct](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Update the leaderboard
+	m.mu_leaderboard.Lock()
+	m.leaderboard.AddPlayerToLeaderboard(data.Winner)
+	m.leaderboard.AddPlayerToLeaderboard(data.Loser)
+	for i := range m.leaderboard.Board {
+		if m.leaderboard.Board[i].Username == data.Winner {
+			m.leaderboard.Board[i].Wins++
+		}
+		if m.leaderboard.Board[i].Username == data.Loser {
+			m.leaderboard.Board[i].Losses++
+		}
+	}
+	m.mu_leaderboard.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "leaderboard updated"})
+}
+
+// Handler for a request to end a matchup
+func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[EndMatchRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	matchID := data.MatchID
+
+	// Check if the match exists
+	m.mu_matches.Lock()
+	_, exists := m.matches[matchID]
+	if !exists {
+		m.mu_matches.Unlock()
+		log.Printf("EndMatch: match %s not found", matchID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(EndMatchResponse{Type: "match not found"})
+		return
+	}
+
+	// Remove the match
+	delete(m.matches, matchID)
+	m.mu_matches.Unlock()
+	log.Printf("Match %s ended and removed", matchID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "match Removed"})
 }
