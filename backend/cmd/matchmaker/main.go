@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strings"
 
 	Checkered "github.com/akeuben/checkered"
 )
@@ -52,13 +53,13 @@ func main() {
 	// --------------------------------------------
 
 	// Leader election endpoints
-	http.HandleFunc("POST /leader-election/election", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/election", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleElectionRequest(w, r)
 	})
-	http.HandleFunc("POST /leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/bully", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleBullyRequest(w, r)
 	})
-	http.HandleFunc("POST /leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /internal/leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
@@ -69,8 +70,27 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
+	// TODO get list of servers from Name Server before/at the start of the election
+	// And have a server refresh loop
+
+	err := http.ListenAndServe(*addr, LeaderMiddleware(&matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If this is the leader server, or an internal route, that is, a route that is
+		// destined for this server specifically (for cross-matchmaker communication), 
+		// then we handle the request locally.
+		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
+			log.Println("Handling reuqest locally for endpoint:", r.URL.Path);
+			next.ServeHTTP(w,r);
+			return;
+		}
+		
+		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
+		http.Redirect(w, r, r.URL.Scheme + matchmaker.Leader.URL + r.URL.Path, http.StatusTemporaryRedirect)
+	})
 }
