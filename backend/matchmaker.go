@@ -34,7 +34,7 @@ type Matchmaker struct {
 	runningInElection   bool
 	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	leaderID   int
+	Leader     Server
 	leaderIDMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
@@ -67,6 +67,10 @@ func (m *Matchmaker) Register(url string) {
 	m.ID = id
 	log.Println("Registered with ID:", m.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", m.ID))
+}
+
+func (m *Matchmaker) IsLeader() bool {
+	return m.ID == m.Leader.ID
 }
 
 // Refreshes and sets the list of known other Matchmakers.
@@ -146,7 +150,10 @@ func (m *Matchmaker) InitiateElection() {
 		// This server has the highest ID, declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			ID:  m.ID,
+			URL: m.URL,
+		}
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -196,7 +203,10 @@ func (m *Matchmaker) InitiateElection() {
 		// Timer fired, so no bully() responses received in time. Declare itself leader
 		m.leaderIDMu.Lock()
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
-		m.leaderID = m.ID
+		m.Leader = Server{
+			ID:  m.ID,
+			URL: m.URL,
+		}
 		m.leaderIDMu.Unlock()
 		m.runningInElectionMu.Lock()
 		m.runningInElection = false
@@ -251,7 +261,7 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send an election(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/election", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send an election(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -273,7 +283,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 		log.Fatal(err)
 	}
 	// Send a leader(i) message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
 		return false
@@ -285,7 +295,7 @@ func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
 // Sends a bully() message to another Matchmaker.
 func (m *Matchmaker) sendBullyMessage(otherMatchmaker Server) {
 	// Send a bully() message
-	res, err := http.Post(otherMatchmaker.URL+"/leader-election/bully", "application/json", nil)
+	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/bully", "application/json", nil)
 	if err != nil {
 		log.Printf("Failed to send a bully() message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
@@ -340,7 +350,6 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	id := otherMatchmaker.ID
 
 	// Check if the message is from an unknown Matchmaker
 	m.otherMatchmakersMu.Lock()
@@ -351,8 +360,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 
 	// Set the new leader
 	m.leaderIDMu.Lock()
-	log.Println("Received a new leader ID:", id)
-	m.leaderID = id
+	log.Println("Received a new leader ID:", otherMatchmaker.ID)
+	m.Leader = otherMatchmaker
 	m.leaderIDMu.Unlock()
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
