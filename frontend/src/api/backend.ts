@@ -150,7 +150,7 @@ export class Backend {
                 const wsUrl = result.url;
                 clearInterval(session.interval);
                 // setup websocket connection
-                const ws = new WebSocket(wsUrl)
+                const ws = new WebSocket(`${wsUrl}/ws`)
 
                 console.log(`Attempting connection to backend game server at ${wsUrl}`)
 

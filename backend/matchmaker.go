@@ -522,14 +522,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
-	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
-	if err != nil {
-		http.Error(w, err.Error(), errStatus)
-		return
-	}
-
-	// Extracting the username
-	username := data.Username
+	username := r.URL.Query().Get("username");
 
 	// Check if the user is in a match
 	for _, match := range m.matches {
