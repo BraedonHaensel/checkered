@@ -23,7 +23,7 @@ func main() {
 	// Instantiating a new matchmaker object
 	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
 
-	// ---------- Not sure if we'll use ----------
+	// ---------------------------------------------
 
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
@@ -39,6 +39,14 @@ func main() {
 
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
+	})
+
+	http.HandleFunc("POST /match/updateleaderboard", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.UpdateLeaderboard(w, r)
+	})
+
+	http.HandleFunc("POST /match/end", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.EndMatch(w, r)
 	})
 
 	// --------------------------------------------
