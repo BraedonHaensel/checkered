@@ -21,18 +21,11 @@ const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 // maintaining the leaderboard and handling all leaderboard requests
 type Matchmaker struct {
 	ID int
-	// we map username to client
-	clients map[string]*Client
 	// games that new clients are in
-	games          map[uuid.UUID]*Game
-	queue          Queue[*Client]
+	matches        map[uuid.UUID]*Match
+	queue          Queue[string]
 	leaderboard    *Leaderboard
 	mu_leaderboard sync.Mutex
-
-	register     chan *Client
-	unregister   chan *Client
-	moveReceiver chan GameMove
-	gameResults  chan GameResult
 
 	// Fully qualified URL of this Matchmaker
 	URL string
@@ -58,16 +51,13 @@ type Matchmaker struct {
 }
 
 func NewMatchmaker(url, nameServerURL string) *Matchmaker {
-	queue := Queue[*Client]{}
+	queue := Queue[string]{}
 	InitQueue(&queue, 100)
 	matchmaker := Matchmaker{
-		clients:        make(map[string]*Client),
-		games:          make(map[uuid.UUID]*Game),
+		matches:        make(map[uuid.UUID]*Match),
 		queue:          queue,
 		leaderboard:    &Leaderboard{},
 		mu_leaderboard: sync.Mutex{},
-		register:       make(chan *Client),
-		unregister:     make(chan *Client),
 
 		URL:               url,
 		nameServerURL:     nameServerURL,
@@ -377,154 +367,213 @@ func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 // -------------------- MATCHMAKING SERVER LOGIC --------------------
 
+type QueueRequest struct {
+	Username string `json:"username"`
+}
+
+type QueueResponse struct {
+	Type string `json:"type"`
+}
+
+type PollResponse struct {
+	Type string `json:"type"`
+	URL  string `json:"url,omitempty"`
+}
+
+type Match struct {
+	MatchID     uuid.UUID
+	RedPlayer   string
+	BlackPlayer string
+	gameserver  string
+}
+
+func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
+
+	// Get all available game servers
+	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+	if err != nil {
+		log.Printf("Failed to fetch game servers: %s", err)
+		return Match{}, err
+	}
+
+	if len(gameServers) == 0 {
+		log.Println("No game servers available")
+		return Match{}, fmt.Errorf("no game servers available")
+	}
+
+	// Pick the first one
+	gameServer := gameServers[0]
+	log.Printf("Picked game server: %s (ID: %d)", gameServer.URL, gameServer.ID)
+
+	return Match{
+		MatchID:     uuid.New(),
+		RedPlayer:   redPlayer,
+		BlackPlayer: blackPlayer,
+		gameserver:  gameServer.URL,
+	}, nil
+}
+
 // Handler for a request to join the queue
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
+
+	// Reading the data in the reuest
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Extracting the username
+	username := data.Username
+
+	// Check if user is already in queue
+	alreadyQueued := false
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			alreadyQueued = true
+		}
+	})
+
+	if alreadyQueued {
+		log.Printf("Player \"%s\" already in queue", username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+		return
+	}
+
+	// Enqueue the user
+	m.queue.enqueue(username)
+	log.Printf("Adding \"%s\" to queue", username)
+
+	// Matchmaking logic
+	if m.queue.size >= 2 {
+		redPlayer := m.queue.dequeue()
+		blackPlayer := m.queue.dequeue()
+		match, err := m.NewMatch(redPlayer, blackPlayer)
+		if err != nil {
+			log.Printf("Failed to create match: %s", err)
+			return
+		}
+		m.matches[match.MatchID] = &match
+
+		// Marshal the match to JSON
+		matchBytes, err := json.Marshal(match)
+		if err != nil {
+			log.Printf("Failed to marshal match: %s", err)
+			return
+		}
+
+		// Send a POST request to the game server with the match details
+		res, err := http.Post(match.gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+		if err != nil {
+			log.Printf("Failed to send match to game server %s: %s", match.gameserver, err)
+			return
+		}
+		defer res.Body.Close()
+
+		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
+	}
+
+	// Let the user know they're in queue
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+
 }
 
 // Handler for a request for a users status on the queue will respond with still
 // in the queue or will respond with a new found match
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
+
+	// Reading the data in the request
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
+	if err != nil {
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	// Extracting the username
+	username := data.Username
+
+	// Check if the user is in a match
+	for _, match := range m.matches {
+		if match.RedPlayer == username || match.BlackPlayer == username {
+			// User has been matched, return the game server URL
+			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.gameserver)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.gameserver})
+			return
+		}
+	}
+
+	// Check if user is already in queue
+	alreadyQueued := false
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			alreadyQueued = true
+		}
+	})
+
+	if alreadyQueued {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PollResponse{Type: "In Queue"})
+		return
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PollResponse{Type: "Not In Queue"})
+		return
+	}
+
+}
+
+// helper function to LeaveQueueRequest to remove value from the queue
+func RemoveStringValue(q *Queue[string], value string) {
+	originalSize := q.size
+	for i := 0; i < originalSize; i++ {
+		v := q.dequeue()
+		if v != value {
+			q.enqueue(v)
+		}
+	}
 }
 
 // Handler for a request to leave the queue
 func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
-}
 
-// Initial Client connection with the matchmaking server handler
-func MatchmakerWs(matchmaker *Matchmaker, w http.ResponseWriter, r *http.Request) {
-
-	// upgrade to a websocket connection
-	conn, err := upgrader.Upgrade(w, r, nil)
+	// Reading the data in the reuest
+	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
-		log.Println(err)
+		http.Error(w, err.Error(), errStatus)
 		return
 	}
 
-	// get a message from the client indicating who they are
-	var registerMessage RegisterMessage
-	err = conn.ReadJSON(&registerMessage)
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	username := data.Username
 
-	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn, matchmaker.unregister, func(client *Client) {
-		matchmaker.register <- client
-	})
-	matchmaker.clients[client.username] = &client
-
-	go client.readThread()
-	go client.writeThread()
-
-	// Send confirmation of registration to client
-	confirmation_msg := ConfirmRegistration{Kind: "registered"}
-	confirmation, err := json.Marshal(confirmation_msg)
-	client.send <- confirmation
-
-	// let the server know and handle the new client
-	// server.register <- &client
-	log.Printf("Client \"%s\" connected to matchmaker server %s", client.username, matchmaker.URL)
-
-}
-
-// main idea of this loop is to register new active users and put them
-// into the server struct
-func (matchmaker *Matchmaker) ServerLoop() {
-	for {
-		select {
-		case client := <-matchmaker.register:
-			var inGameAlready bool
-			for _, game := range matchmaker.games {
-				if game.redPlayer.username == client.username {
-					// client is already in a game
-					inGameAlready = true
-				}
-				if game.blackPlayer.username == client.username {
-					// client is already in a game
-					inGameAlready = true
-				}
-			}
-			if inGameAlready {
-				break
-			}
-			if client.enqueued {
-				log.Printf("Client \"%s\" is already enqueued", client.username)
-			} else {
-				log.Printf("Client \"%s\" has joined the queue", client.username)
-				// queue the new client into a game
-				client.enqueued = true
-				matchmaker.queue.enqueue(client)
-				log.Println("Queue:")
-				matchmaker.queue.forEach(func(c *Client, i int) {
-					log.Printf("\t%d: %s", i, c.username)
-				})
-				log.Println("=================")
-			}
-		case unregister := <-matchmaker.unregister:
-			delete(matchmaker.clients, unregister.username)
-			RemoveValue(&matchmaker.queue, unregister)
-			log.Printf(
-				"Client \"%s\" deregistered",
-				unregister.username,
-			)
-			// TODO: remove client from game rooms
-		case gameResult := <-matchmaker.gameResults:
-			game, exists := matchmaker.games[gameResult.gameID]
-
-			if exists {
-				matchmaker.mu_leaderboard.Lock()
-				matchmaker.leaderboard.UpdateLeaderboard(gameResult)
-				matchmaker.mu_leaderboard.Unlock()
-
-				game.mu.Lock()
-				if game.blackPlayer != nil {
-					game.blackPlayer.currentGame = nil
-				}
-				if game.redPlayer != nil {
-					game.redPlayer.currentGame = nil
-				}
-				game.mu.Unlock()
-				delete(matchmaker.games, gameResult.gameID)
-			}
-		default:
-			if matchmaker.queue.size < 2 {
-				break
-			}
-			redPlayer := matchmaker.queue.dequeue()
-			blackPlayer := matchmaker.queue.dequeue()
-			redPlayer.enqueued = false
-			blackPlayer.enqueued = false
-			log.Printf("New game created (red: %s, black: %s)\n", redPlayer.username, blackPlayer.username)
-			gameRoom := Game{
-				gameID:        uuid.New(),
-				redPlayer:     redPlayer,
-				blackPlayer:   blackPlayer,
-				tileStates:    generateInitialTileStates(),
-				turn:          Red,
-				previousMoves: make([]GameMove, 0),
-				resultChan:    matchmaker.gameResults,
-				mu:            sync.Mutex{},
-			}
-			matchmaker.games[gameRoom.gameID] = &gameRoom
-			// tell both servers about the new game
-			redMessage := gameRoom.messageFromNewGame("red", blackPlayer.username)
-			blackMessage := gameRoom.messageFromNewGame("black", redPlayer.username)
-			redBytes, err := json.Marshal(redMessage)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			blackBytes, err := json.Marshal(blackMessage)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			matchmaker.clients[gameRoom.blackPlayer.username].currentGame = &gameRoom
-			matchmaker.clients[gameRoom.redPlayer.username].currentGame = &gameRoom
-			// send the message that they have found a game to both players
-			matchmaker.clients[gameRoom.blackPlayer.username].send <- blackBytes
-			matchmaker.clients[gameRoom.redPlayer.username].send <- redBytes
+	// Check if user is actually in the queue
+	inQueue := false
+	m.queue.forEach(func(u string, i int) {
+		if u == username {
+			inQueue = true
 		}
+	})
+
+	if !inQueue {
+		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(QueueResponse{Type: "Not In Queue"})
+		return
 	}
+
+	RemoveStringValue(&m.queue, username)
+	log.Printf("User \"%s\" left the queue (size: %d)", username, m.queue.size)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
+
 }
