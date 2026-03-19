@@ -23,7 +23,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 
 // Parses JSON data from a request. Returns an error and HTTP status code if the
 // parsing fails.
-func ParseJsonRequestData[T any](req *http.Request) (T, error, int) {
+func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 	var data T
 	// Parse the request body
 	body, err := io.ReadAll(req.Body)

@@ -1,6 +1,7 @@
 package checkered
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -124,7 +125,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
-	match, err, status := ParseJsonRequestData[Match](r)
+	match, err, status := parseJsonRequestData[Match](r)
 	if err != nil {
 		fmt.Printf("Failed to parse game creation request %s (%d)", err, status)
 		return
@@ -218,7 +219,7 @@ func (server *GameServer) ServerLoop() {
 			log.Println("Attempted unregister")
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
-			game, exists := server.games[gameResult.gameID]
+			_, exists := server.games[gameResult.gameID]
 
 			if exists {
 				// server.Mu_leaderboard.Lock()
@@ -233,6 +234,45 @@ func (server *GameServer) ServerLoop() {
 				// 	game.redPlayer.currentGame = nil
 				// }
 				// game.mu.Unlock()
+				matchmakingServers, err := SendServerListRequest(
+					server.nameServerURL + "/matchmakers",
+				)
+				if err != nil {
+					log.Printf("Failed to fetch game servers: %s", err)
+					break
+				}
+				if len(matchmakingServers) == 0 {
+					log.Println("No match making servers available")
+					break
+				}
+				matchmakingServer := matchmakingServers[0]
+				log.Printf(
+					"Selected match making server: %s (ID: %d)",
+					matchmakingServer.URL,
+					matchmakingServer.ID,
+				)
+
+				gameResultMessage := GameResultStruct{
+					GameID: gameResult.gameID,
+					Winner: *gameResult.winner,
+					Loser:  *gameResult.loser,
+				}
+				gameResultBytes, err := json.Marshal(gameResultMessage)
+				if err != nil {
+					log.Printf("Failed to marshal result: %s", err)
+					break
+				}
+				res, err := http.Post(
+					matchmakingServer.URL+"/",
+					"application/json",
+					bytes.NewBuffer(gameResultBytes),
+				)
+				if err != nil {
+					log.Printf("Failed to send game results to match making server: %s", err)
+					break
+				}
+				defer res.Body.Close()
+				log.Printf("Leaderboard updated!")
 
 				delete(server.games, gameResult.gameID)
 			} else {
