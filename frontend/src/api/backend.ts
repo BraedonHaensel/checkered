@@ -128,18 +128,18 @@ export class Backend {
         let attempting = false;
 
         const attemptConnection = async () => {
+            console.log("Checking if game was found!");
             if(attempting) return;
             attempting = true;
-            const raw = await fetch(`${(await this.server()).url}/queue/poll`, {
-                body: JSON.stringify({
-                    username: user,
-                }),
+            const raw = await fetch(`${(await this.server()).url}/queue/poll?username=${user}`, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 method: "GET"
             });
             const result = await raw.json();
+
+            console.log(result);
 
             // TODO: We assume the shape of the resulting json 
             // object for now.
@@ -171,6 +171,7 @@ export class Backend {
             }
 
             attempting = false;
+            console.log("exit");
         }
 
         session.interval = setInterval(attemptConnection, POLL_TIME);

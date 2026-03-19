@@ -11,15 +11,22 @@ import (
 	Checkered "github.com/akeuben/checkered"
 )
 
+// Setting local addresses including the default nameserver
 var (
 	addr          = flag.String("addr", ":4000", "http service address")
 	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
 )
 
 func main() {
+
+	// Reading command line
 	flag.Parse()
 	url := Checkered.GetFullURL(*addr)
+
+	// Instantiating a new matchmaker object
 	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
+
+	// ---------- Not sure if we'll use ----------
 
 	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.GetLeaderboard(w, r)
@@ -36,6 +43,8 @@ func main() {
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
+
+	// --------------------------------------------
 
 	// Leader election endpoints
 	http.HandleFunc("POST /internal/leader-election/election", func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +67,7 @@ func main() {
 	// TODO get list of servers from Name Server before/at the start of the election
 	// And have a server refresh loop
 
-	err := http.ListenAndServe(*addr, LeaderMiddleware(&matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
+	err := http.ListenAndServe(*addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
