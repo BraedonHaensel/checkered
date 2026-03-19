@@ -61,13 +61,6 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	// TODO get list of servers from Name Server before/at the start of the election
-	// And have a server refresh loop
-	go matchmaker.ServerLoop()
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		Checkered.MatchmakerWs(matchmaker, w, r)
-	})
-
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
