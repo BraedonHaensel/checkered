@@ -58,7 +58,9 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	matchmaker := Matchmaker{
 		matches:        make(map[uuid.UUID]*Match),
 		queue:          queue,
-		leaderboard:    &Leaderboard{},
+		leaderboard:    &Leaderboard{
+			Board: 		make([]LeaderboardEntry, 0),
+		},
 		mu_leaderboard: sync.Mutex{},
 
 		URL:               url,
@@ -499,10 +501,12 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	// Enqueue the user
 	m.mu_queue.Lock()
 	m.queue.enqueue(username)
+	m.mu_queue.Unlock()
 	log.Printf("Adding \"%s\" to queue", username)
 
 	// Matchmaking logic
 	if m.queue.size >= 2 {
+		m.mu_queue.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
 		m.mu_queue.Unlock()
@@ -545,14 +549,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
-	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
-	if err != nil {
-		http.Error(w, err.Error(), errStatus)
-		return
-	}
-
-	// Extracting the username
-	username := data.Username
+	username := r.URL.Query().Get("username");
 	m.mu_matches.Lock()
 
 	// Check if the user is in a match
@@ -567,6 +564,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	m.mu_matches.Unlock()
 
 	// Check if user is already in queue
 	m.mu_queue.Lock()
