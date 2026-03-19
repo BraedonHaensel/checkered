@@ -74,6 +74,6 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		}
 		
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		http.Redirect(w, r, r.URL.Scheme + matchmaker.GetLeader().URL + r.URL.Path, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, r.URL.Scheme + matchmaker.Leader.URL + r.URL.Path, http.StatusTemporaryRedirect)
 	})
 }
