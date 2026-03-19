@@ -14,18 +14,25 @@ var (
 )
 
 func main() {
+	// Reading command line
 	flag.Parse()
+	url := Checkered.GetFullURL(*addr)
+
+	// Create the server object
 	server := Checkered.InitServer(*nameServerURL)
+
+	// Start the server loop and register handlers
 	go server.ServerLoop()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		Checkered.ServeWs(server, w, r)
 	})
+	http.HandleFunc("POST /newGame", server.CreateGame)
 
 	// Register with the Name Server
-	url := Checkered.GetFullURL(*addr)
 	log.Println("Game Server running on", url)
 	server.Register(url)
 
+	// Start the HTTP server
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

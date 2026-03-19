@@ -90,14 +90,14 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		// If this is the leader server, or an internal route, that is, a route that is
-		// destined for this server specifically (for cross-matchmaker communication), 
+		// destined for this server specifically (for cross-matchmaker communication),
 		// then we handle the request locally.
 		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
-			log.Println("Handling reuqest locally for endpoint:", r.URL.Path);
-			next.ServeHTTP(w,r);
-			return;
+			log.Println("Handling reuqest locally for endpoint:", r.URL.Path)
+			next.ServeHTTP(w, r)
+			return
 		}
 
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
@@ -106,15 +106,15 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		if err != nil {
 			println("Error, could not parse leader url")
 		}
-		
+
 		proxy := httputil.NewSingleHostReverseProxy(newUrl)
 
-		proxy.ErrorHandler = func (w http.ResponseWriter, r *http.Request, err error) {
-			log.Println("Failed to contact leader, initiating election...");
-			matchmaker.InitiateElection();
+		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			log.Println("Failed to contact leader, initiating election...")
+			matchmaker.InitiateElection()
 			// TODO: Resend the request that failed to reach the leader.
-		};
+		}
 
-		proxy.ServeHTTP(w, r);
+		proxy.ServeHTTP(w, r)
 	})
 }
