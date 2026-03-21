@@ -8,11 +8,11 @@ Use:
   - `Dequeue` to remove elements from the queue
 */
 type Queue[T any] struct {
-	maxSize int // The maximum capacity of the queue
-	size    int // The current size of the queue (i.e. the number of elements in the queue)
-	head    int // The pointer to the head of the queue
-	tail    int // The pointer to the tail of the queue
-	arr     []T // The underlying container of the queue
+	MaxSize int 	`json:"max_size"` // The maximum capacity of the queue
+	Size    int 	`json:"size"`		// The current size of the queue (i.e. the number of elements in the queue)
+	Head    int 	`json:"head"` 	// The pointer to the head of the queue
+	Tail    int 	`json:"tail"` 	// The pointer to the tail of the queue
+	Arr     []T 	`json:"data"` 	// The underlying container of the queue
 }
 
 /*
@@ -22,11 +22,11 @@ Args:
   - size int: The max size of the queue
 */
 func InitQueue[T any](queue *Queue[T], size int) {
-	queue.arr = make([]T, size)
-	queue.maxSize = size
-	queue.size = 0
-	queue.head = 0
-	queue.tail = 0
+	queue.Arr = make([]T, size)
+	queue.MaxSize = size
+	queue.Size = 0
+	queue.Head = 0
+	queue.Tail = 0
 }
 
 /*
@@ -35,12 +35,12 @@ Args:
   - value T: The value to add
 */
 func (queue *Queue[T]) enqueue(value T) {
-	if queue.size == queue.maxSize {
+	if queue.Size == queue.MaxSize {
 		panic("Queue Overflow!")
 	}
-	queue.arr[queue.tail] = value
-	queue.tail = (queue.tail + 1) % queue.maxSize
-	queue.size++
+	queue.Arr[queue.Tail] = value
+	queue.Tail = (queue.Tail + 1) % queue.MaxSize
+	queue.Size++
 }
 
 /*
@@ -52,23 +52,23 @@ Returns:
   - T: The element removed
 */
 func (queue *Queue[T]) dequeue() T {
-	if queue.size == 0 {
+	if queue.Size == 0 {
 		panic("Queue Empty!")
 	}
-	res := queue.arr[queue.head]
-	queue.head = (queue.head + 1) % queue.maxSize
-	queue.size--
+	res := queue.Arr[queue.Head]
+	queue.Head = (queue.Head + 1) % queue.MaxSize
+	queue.Size--
 	return res
 }
 
 func (queue *Queue[T]) forEach(callback func(T, int)) {
-	for i := 0; i < queue.size; i++ {
-		callback(queue.arr[(queue.head+i)%queue.maxSize], i)
+	for i := 0; i < queue.Size; i++ {
+		callback(queue.Arr[(queue.Head+i)%queue.MaxSize], i)
 	}
 }
 
 func RemoveValue(q *Queue[*Client], value *Client) {
-	originalSize := q.size
+	originalSize := q.Size
 
 	for i := 0; i < originalSize; i++ {
 		v := q.dequeue()

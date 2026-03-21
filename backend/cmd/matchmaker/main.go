@@ -65,6 +65,18 @@ func main() {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
+	// Replication endpoints 
+
+	http.HandleFunc("POST /internal/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetLeaderboard(w, r)
+	})
+	http.HandleFunc("POST /internal/queue", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetQueue(w, r)
+	})
+	http.HandleFunc("POST /internal/matches", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetMatches(w, r)
+	})
+
 	// Register with the Name Server
 	log.Println("Matchmaker running on", url)
 	matchmaker.Register(url)
@@ -112,7 +124,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
 			matchmaker.InitiateElection()
-			// TODO: Resend the request that failed to reach the leader.
+			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
 
 		proxy.ServeHTTP(w, r)

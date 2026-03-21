@@ -435,10 +435,10 @@ type GameResultStruct struct {
 }
 
 type Match struct {
-	MatchID     uuid.UUID
-	RedPlayer   string
-	BlackPlayer string
-	gameserver  string
+	MatchID     uuid.UUID	`json:"match_id"`
+	RedPlayer   string		`json:"red"`
+	BlackPlayer string		`json:"black"`
+	Gameserver  string		`json:"server"`
 }
 
 func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
@@ -463,7 +463,7 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 		MatchID:     uuid.New(),
 		RedPlayer:   redPlayer,
 		BlackPlayer: blackPlayer,
-		gameserver:  gameServer.URL,
+		Gameserver:  gameServer.URL,
 	}, nil
 }
 
@@ -505,7 +505,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Adding \"%s\" to queue", username)
 
 	// Matchmaking logic
-	if m.queue.size >= 2 {
+	if m.queue.Size >= 2 {
 		m.mu_queue.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
@@ -526,16 +526,20 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		m.broadcastMatchesChanged()
+
 		// Send a POST request to the game server with the match details
-		res, err := http.Post(match.gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+		res, err := http.Post(match.Gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
-			log.Printf("Failed to send match to game server %s: %s", match.gameserver, err)
+			log.Printf("Failed to send match to game server %s: %s", match.Gameserver, err)
 			return
 		}
 		defer res.Body.Close()
 
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
 	}
+
+	m.broadcastQueueChanged()
 
 	// Let the user know they're in queue
 	w.Header().Set("Content-Type", "application/json")
@@ -557,10 +561,10 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 		if match.RedPlayer == username || match.BlackPlayer == username {
 			m.mu_matches.Unlock()
 			// User has been matched, return the game server URL
-			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.gameserver)
+			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.Gameserver)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.gameserver})
+			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.Gameserver})
 			return
 		}
 	}
@@ -592,7 +596,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 // helper function to LeaveQueueRequest to remove value from the queue
 func RemoveStringValue(q *Queue[string], value string) {
-	originalSize := q.size
+	originalSize := q.Size
 	for i := 0; i < originalSize; i++ {
 		v := q.dequeue()
 		if v != value {
@@ -635,6 +639,8 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	m.mu_queue.Unlock()
 	log.Printf("User \"%s\" left the queue", username)
 
+	m.broadcastQueueChanged()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
@@ -664,6 +670,8 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	m.mu_leaderboard.Unlock()
+
+	m.broadcastLeaderboardChanged()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -697,7 +705,90 @@ func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 	m.mu_matches.Unlock()
 	log.Printf("Match %s ended and removed", matchID)
 
+	m.broadcastMatchesChanged()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "match Removed"})
+}
+
+func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[Leaderboard](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setLeaderboard error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_leaderboard.Lock()
+	log.Printf("New leaderboard: %v", data)
+	m.leaderboard = &data
+	m.mu_leaderboard.Unlock()
+}
+
+func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[Queue[string]](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setQueue error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_queue.Lock()
+	m.queue = data
+	m.mu_queue.Unlock()
+}
+
+func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[map[uuid.UUID]*Match](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setQueue error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_matches.Lock()
+	m.matches = data
+	m.mu_matches.Unlock()
+}
+
+
+func (m *Matchmaker) broadcast(endpoint string, data any) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	m.otherMatchmakersMu.Lock()
+	for _, server := range m.otherMatchmakers {
+		res, err := http.Post(server.URL+endpoint, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Failed to send a broadcast message to Matchmaker %d, assuming it is down", server.ID)
+			// TODO: Inform name server that this matchmaker is down
+			return
+		}
+		defer res.Body.Close()
+	}
+	m.otherMatchmakersMu.Unlock()
+}
+
+func (m *Matchmaker) broadcastLeaderboardChanged() {
+	m.mu_leaderboard.Lock()
+	m.broadcast("/internal/leaderboard", m.leaderboard);
+	m.mu_leaderboard.Unlock()
+}
+
+func (m *Matchmaker) broadcastQueueChanged() {
+	m.mu_queue.Lock()
+	m.broadcast("/internal/queue", m.queue);
+	m.mu_queue.Unlock()
+}
+
+func (m *Matchmaker) broadcastMatchesChanged() {
+	m.mu_matches.Lock()
+	m.broadcast("/internal/matches", m.matches);
+	m.mu_matches.Unlock()
 }
