@@ -245,13 +245,13 @@ const Game = ({
         console.info(
             `Moving piece from ${source_index} to ${destination_index}`
         )
-        // TODO update when we formalize the format of move messages
+        // Send the move to the server
         session.send({
             type: 'move',
             source_index,
             destination_index,
         })
-        // TODO simple implementation, will likely need more logic
+        // Perform the move locally
         performPieceMove(source_index, destination_index)
     }
 
