@@ -65,7 +65,7 @@ func main() {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
-	// Replication endpoints 
+	// Replication endpoints
 
 	http.HandleFunc("POST /internal/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.SetLeaderboard(w, r)
@@ -113,7 +113,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		}
 
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		newUrl, err := url.Parse(r.URL.Scheme + matchmaker.Leader.URL)
+		newUrl, err := url.Parse(matchmaker.Leader.URL)
 
 		if err != nil {
 			println("Error, could not parse leader url")
