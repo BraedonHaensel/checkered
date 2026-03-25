@@ -133,6 +133,7 @@ export class Backend {
         matchId: string
     ) {
         try {
+            console.log('Requesting a new Game Server')
             const raw = await fetch(
                 `${(await this.server()).url}/match/request-new-game-server`,
                 {
@@ -146,9 +147,14 @@ export class Backend {
                     method: 'POST',
                 }
             )
+            if (!raw.ok) {
+                console.error(
+                    'Failed to request a new Game Server:',
+                    await raw.text()
+                )
+                return
+            }
             const result = await raw.json()
-            // TODO
-            console.log('TODO GOT NEW SERVER REQUEST RESULT:')
             console.log(result)
         } catch (e) {
             console.error('Failed to request a new Game Server:', e)
@@ -175,6 +181,11 @@ export class Backend {
                         method: 'POST',
                     }
                 )
+                if (!raw.ok) {
+                    console.error('Failed to join queue:', raw.text())
+                    return false
+                }
+
                 const result: JoinQueueResponse = await raw.json()
                 if (result.type === 'ALREADY_IN_QUEUE') {
                     console.log('Already in queue')

@@ -719,7 +719,7 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	}
 
 	// Deregister the Game Server
-	go m.DeregisterGameServer(data.OldGameServer.ID)
+	m.DeregisterGameServer(data.OldGameServer.ID)
 
 	// === TODO Choose a proper backup Game Server and perform necessary backup operations (probably move to a relocateGame function) ===
 	// TODO this is just a temporary fix of choosing the first server
@@ -743,6 +743,29 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 
 	// Switch the match to the new Game Server
 	match.GameServer = gameServer
+
+	// Boardcast the match change to the backup Matchmakers
+	m.broadcastMatchesChanged()
+
+	// Marshal the match to JSON
+	matchBytes, err := json.Marshal(match)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	// Send a POST request to the game server with the match details
+	res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	defer res.Body.Close()
+
 	log.Printf("Match %s moved to Game Server [%d] %s", match.MatchID, gameServer.ID, gameServer.URL)
 
 	w.Header().Set("Content-Type", "application/json")
