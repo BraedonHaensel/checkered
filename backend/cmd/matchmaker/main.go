@@ -44,6 +44,10 @@ func main() {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
 
+	http.HandleFunc("POST /match/request-new-game-server", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.RequestNewGameServer(w, r)
+	})
+
 	http.HandleFunc("POST /match/updateleaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.UpdateLeaderboard(w, r)
 	})

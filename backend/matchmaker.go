@@ -415,8 +415,16 @@ type QueueResponse struct {
 }
 
 type PollResponse struct {
+	Type       string `json:"type"`
+	GameServer Server `json:"game_server"`
+}
+
+type RequestNewGameServerRequest struct {
+	OldGameServerID int `json:"old_game_server_id"`
+}
+
+type RequestNewGameServerResponse struct {
 	Type string `json:"type"`
-	URL  string `json:"url,omitempty"`
 }
 
 type EndMatchRequest struct {
@@ -438,7 +446,7 @@ type Match struct {
 	MatchID     uuid.UUID `json:"match_id"`
 	RedPlayer   string    `json:"red"`
 	BlackPlayer string    `json:"black"`
-	Gameserver  string    `json:"server"`
+	GameServer  Server    `json:"server"`
 }
 
 func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
@@ -463,7 +471,7 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 		MatchID:     uuid.New(),
 		RedPlayer:   redPlayer,
 		BlackPlayer: blackPlayer,
-		Gameserver:  gameServer.URL,
+		GameServer:  gameServer,
 	}, nil
 }
 
@@ -529,9 +537,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		m.broadcastMatchesChanged()
 
 		// Send a POST request to the game server with the match details
-		res, err := http.Post(match.Gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
-			log.Printf("Failed to send match to game server %s: %s", match.Gameserver, err)
+			log.Printf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
 			return
 		}
 		defer res.Body.Close()
@@ -561,10 +569,10 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 		if match.RedPlayer == username || match.BlackPlayer == username {
 			m.mu_matches.Unlock()
 			// User has been matched, return the game server URL
-			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.Gameserver)
+			log.Printf("User \"%s\" has been matched, sending game server [%d] %s", username, match.GameServer.ID, match.GameServer.URL)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", URL: match.Gameserver})
+			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", GameServer: match.GameServer})
 			return
 		}
 	}
@@ -645,6 +653,62 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
+}
+
+// Checks the health of a server. Returns true if healthy, false otherwise
+func (m *Matchmaker) checkServerHealth(url string, timeout time.Duration) bool {
+	client := http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Get(url + "/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// Handler for a request for a new Game Server to host a match
+func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("Getting server to shut downnnnnnnnnnn")
+	data, err, errStatus := parseJsonRequestData[RequestNewGameServerRequest](r)
+	if err != nil {
+		fmt.Println("Errrr", err)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	fmt.Println("Server id to SHUT DOWNNNNNN", data.OldGameServerID)
+
+	if m.checkServerHealth("http://localhost:4000", 5*time.Second) {
+		// Game Server is healthy, keep it
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "HEALTHY"})
+		return
+	}
+
+	// Get all available game servers
+	// gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+	// if err != nil {
+	// 	log.Printf("Failed to fetch game servers: %s", err)
+	// 	return Match{}, err
+	// }
+
+	// if len(gameServers) == 0 {
+	// 	log.Println("No game servers available")
+	// 	return Match{}, fmt.Errorf("no game servers available")
+	// }
+
+	// Pick a new matchmaker
+	// Will temp code a random matchmaker from list
+	// Taylor TODO redirect to one with the latest game state backup
+	fmt.Println("TODO Processing new game server request...")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "SUCCESS"})
 }
 
 // Handler for a request to update the leaderboard

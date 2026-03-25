@@ -22,7 +22,7 @@ const QUEUE_POLL_INTERVAL = 2000
 // Poll response type from Matchmaker
 type PollResponse = {
     type: 'IN_GAME' | 'IN_QUEUE' | 'NOT_IN_QUEUE'
-    url?: string
+    game_server?: BackendServer
 }
 
 export class Backend {
@@ -127,13 +127,13 @@ export class Backend {
      * Sends a request to the Matchmaker for a new Game Server.
      * @param gameServerUrl URL of the original Game Server that has crashed.
      */
-    private async sendNewGameServerRequest(gameServerUrl: string) {
+    private async sendNewGameServerRequest(gameServer: BackendServer) {
         try {
             const raw = await fetch(
-                `${(await this.server()).url}//match/request-new-game-server`,
+                `${(await this.server()).url}/match/request-new-game-server`,
                 {
                     body: JSON.stringify({
-                        old_game_server_url: gameServerUrl,
+                        old_game_server_id: gameServer.id,
                     }),
                     headers: {
                         'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ export class Backend {
                 clearInterval(session.interval)
 
                 // Game found, connect to the Game Server using a WebSocket
-                const wsUrl = `${result.url}/ws`
+                const wsUrl = `${result.game_server!.url}/ws`
                 const ws = new WebSocket(wsUrl)
                 console.log(
                     `Attempting WebSocket connection to Game Server: ${wsUrl}`
@@ -232,7 +232,7 @@ export class Backend {
                         )
 
                         // Request a new Game Server
-                        await this.sendNewGameServerRequest(result.url!)
+                        await this.sendNewGameServerRequest(result.game_server!)
 
                         // Attempt a new connection
                         this.connectSession(session, user, false)
@@ -257,6 +257,7 @@ export class Backend {
 
         // Start periodically polling the Matchmaker for the queueing status
         session.interval = setInterval(pollMatchmaker, QUEUE_POLL_INTERVAL)
+        pollMatchmaker()
     }
 
     public createSession(user: string): Session {
