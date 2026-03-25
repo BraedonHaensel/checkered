@@ -127,6 +127,7 @@ export class Backend {
     /**
      * Sends a request to the Matchmaker for a new Game Server.
      * @param gameServerUrl URL of the original Game Server that has crashed.
+     * @param matchId ID of the player's match.
      */
     private async sendNewGameServerRequest(
         gameServer: BackendServer,
