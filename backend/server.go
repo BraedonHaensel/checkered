@@ -80,6 +80,13 @@ func (server *GameServer) takeOverGame(w http.ResponseWriter, r *http.Request) {
 	// TODO: Setup game for client connections
 }
 
+func (server *GameServer) broadcastMessage() {
+	// TODO: setup message structure
+	// TODO: broadcast message to all servers
+	// TODO: wait for acks or timeouts
+	// TODO: inform nameserver of any timeouts
+}
+
 // Register with the Name Server
 func (server *GameServer) Register(url string) {
 	id, err := SendRegistrationRequest(url, server.nameServerURL+"/register/game-server")
@@ -89,13 +96,6 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
-}
-
-func (server *GameServer) readThread() {
-}
-
-func (server *GameServer) writeThread() {
-
 }
 
 type RegisterMessage struct {
