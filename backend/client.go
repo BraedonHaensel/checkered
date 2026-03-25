@@ -216,6 +216,7 @@ type EnqueueRequest struct {
 }
 
 func (c *Client) handleNewMove(p GameMove) {
+	// TODO: send game move to cluster and wait for acks
 	c.currentGame.mu.Lock()
 	defer c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)

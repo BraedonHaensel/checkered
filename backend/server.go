@@ -48,6 +48,9 @@ type GameServer struct {
 	nameServerURL string
 
 	pendingGames map[uuid.UUID]*PendingGame
+
+	// Consistency related attributes
+	inQueue Queue[]
 }
 
 func InitServer(nameServerURL string) *GameServer {
@@ -66,6 +69,17 @@ func InitServer(nameServerURL string) *GameServer {
 	return &server
 }
 
+func (server *GameServer) handleInternalMessage(w http.ResponseWriter, r *http.Request) {
+	// TODO: Determine which type of message was recieved
+	// If a game update then update the local game state and ack
+	// If a game creation then create a game but do not start
+	// If a game deletion then remove the game
+}
+
+func (server *GameServer) takeOverGame(w http.ResponseWriter, r *http.Request) {
+	// TODO: Setup game for client connections
+}
+
 // Register with the Name Server
 func (server *GameServer) Register(url string) {
 	id, err := SendRegistrationRequest(url, server.nameServerURL+"/register/game-server")
@@ -75,6 +89,13 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
+}
+
+func (server *GameServer) readThread() {
+}
+
+func (server *GameServer) writeThread() {
+
 }
 
 type RegisterMessage struct {
@@ -262,18 +283,6 @@ func (server *GameServer) ServerLoop() {
 			_, exists := server.games[gameResult.gameID]
 
 			if exists {
-				// server.Mu_leaderboard.Lock()
-				// server.leaderboard.UpdateLeaderboard(gameResult)
-				// server.Mu_leaderboard.Unlock()
-
-				// game.mu.Lock()
-				// if game.blackPlayer != nil {
-				// 	game.blackPlayer.currentGame = nil
-				// }
-				// if game.redPlayer != nil {
-				// 	game.redPlayer.currentGame = nil
-				// }
-				// game.mu.Unlock()
 				matchmakingServers, err := SendServerListRequest(
 					server.nameServerURL + "/matchmakers",
 				)

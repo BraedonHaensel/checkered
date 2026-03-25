@@ -503,7 +503,7 @@ func (game *Game) currentWinner() string {
 }
 
 func (game *Game) handleGameEnd() {
-
+	// TODO: send end message to cluster and wait for acks
 	winner := game.currentWinner()
 	endMessage := GameEndMessage{
 		Kind:   "game_end",
