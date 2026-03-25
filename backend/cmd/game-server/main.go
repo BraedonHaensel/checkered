@@ -29,6 +29,13 @@ func main() {
 	})
 	http.HandleFunc("POST /newGame", server.CreateGame)
 
+	// Endpoint to check the health of the Game Server
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		// Note: Uncomment the below "select {}" line to simulate an unresponsive Game Server
+		// select {}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	// Register with the Name Server
 	log.Println("Game Server running on", url)
 	server.Register(url)

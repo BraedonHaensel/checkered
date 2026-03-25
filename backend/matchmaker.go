@@ -122,7 +122,7 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 
 // Deregisters another Matchmaker from the Name Server.
 func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
-	// Create the registration request
+	// Create the deregistration request
 	log.Println("Deregistering Matchmaker", otherMatchmakerID)
 	body := fmt.Appendf(nil, `{"id": %d}`, otherMatchmakerID)
 	res, err := http.Post(m.nameServerURL+"/deregister/matchmaker", "application/json", bytes.NewBuffer(body))
@@ -141,6 +141,18 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 		}
 	}
 	m.otherMatchmakersMu.Unlock()
+}
+
+// Deregisters a Game Server from the Name Server.
+func (m *Matchmaker) DeregisterGameServer(gameServerID int) {
+	// Create the deregistration request
+	log.Println("Deregistering Game Server", gameServerID)
+	body := fmt.Appendf(nil, `{"id": %d}`, gameServerID)
+	res, err := http.Post(m.nameServerURL+"/deregister/game-server", "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to deregister Game Server %d: %v", gameServerID, err)
+	}
+	defer res.Body.Close()
 }
 
 // Initiates a leader election using the Bully algorithm.
@@ -415,8 +427,18 @@ type QueueResponse struct {
 }
 
 type PollResponse struct {
+	Type       string    `json:"type"`
+	GameServer Server    `json:"game_server"`
+	MatchID    uuid.UUID `json:"match_id,omitempty"`
+}
+
+type RequestNewGameServerRequest struct {
+	OldGameServer Server    `json:"old_game_server"`
+	MatchID       uuid.UUID `json:"match_id"`
+}
+
+type RequestNewGameServerResponse struct {
 	Type string `json:"type"`
-	URL  string `json:"url,omitempty"`
 }
 
 type EndMatchRequest struct {
@@ -435,10 +457,11 @@ type GameResultStruct struct {
 }
 
 type Match struct {
-	MatchID     uuid.UUID
-	RedPlayer   string
-	BlackPlayer string
-	gameserver  string
+	MatchID     uuid.UUID  `json:"match_id"`
+	RedPlayer   string     `json:"red"`
+	BlackPlayer string     `json:"black"`
+	GameServer  Server     `json:"server"`
+	Mu          sync.Mutex `json:"-"` // Omit from JSON
 }
 
 func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
@@ -463,7 +486,7 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 		MatchID:     uuid.New(),
 		RedPlayer:   redPlayer,
 		BlackPlayer: blackPlayer,
-		gameserver:  gameServer.URL,
+		GameServer:  gameServer,
 	}, nil
 }
 
@@ -494,7 +517,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Player \"%s\" already in queue", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_IN_QUEUE"})
 		return
 	}
 
@@ -505,7 +528,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Adding \"%s\" to queue", username)
 
 	// Matchmaking logic
-	if m.queue.size >= 2 {
+	if m.queue.Size >= 2 {
 		m.mu_queue.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
@@ -526,10 +549,12 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		m.broadcastMatchesChanged()
+
 		// Send a POST request to the game server with the match details
-		res, err := http.Post(match.gameserver+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
-			log.Printf("Failed to send match to game server %s: %s", match.gameserver, err)
+			log.Printf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
 			return
 		}
 		defer res.Body.Close()
@@ -537,10 +562,12 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
 	}
 
+	m.broadcastQueueChanged()
+
 	// Let the user know they're in queue
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
 }
 
@@ -553,14 +580,14 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	m.mu_matches.Lock()
 
 	// Check if the user is in a match
-	for _, match := range m.matches {
+	for matchID, match := range m.matches {
 		if match.RedPlayer == username || match.BlackPlayer == username {
 			m.mu_matches.Unlock()
 			// User has been matched, return the game server URL
-			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.gameserver)
+			log.Printf("User \"%s\" has been matched, sending game server [%d] %s", username, match.GameServer.ID, match.GameServer.URL)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.gameserver})
+			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", GameServer: match.GameServer, MatchID: matchID})
 			return
 		}
 	}
@@ -579,12 +606,12 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	if alreadyQueued {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(PollResponse{Type: "In Queue"})
+		json.NewEncoder(w).Encode(PollResponse{Type: "IN_QUEUE"})
 		return
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(PollResponse{Type: "Not In Queue"})
+		json.NewEncoder(w).Encode(PollResponse{Type: "NOT_IN_QUEUE"})
 		return
 	}
 
@@ -592,7 +619,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 // helper function to LeaveQueueRequest to remove value from the queue
 func RemoveStringValue(q *Queue[string], value string) {
-	originalSize := q.size
+	originalSize := q.Size
 	for i := 0; i < originalSize; i++ {
 		v := q.dequeue()
 		if v != value {
@@ -627,7 +654,7 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(QueueResponse{Type: "Not In Queue"})
+		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_NOT_IN_QUEUE"})
 		return
 	}
 	m.mu_queue.Lock()
@@ -635,10 +662,115 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	m.mu_queue.Unlock()
 	log.Printf("User \"%s\" left the queue", username)
 
+	m.broadcastQueueChanged()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
+	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
+}
+
+// Checks the health of a server. Returns true if healthy, false otherwise
+func (m *Matchmaker) checkServerHealth(url string, timeout time.Duration) bool {
+	client := http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Get(url + "/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// Handler for a request for a new Game Server to host a match
+func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[RequestNewGameServerRequest](r)
+	if err != nil {
+		log.Println("Errrr", err)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+	oldGameServer := data.OldGameServer
+
+	m.mu_matches.Lock()
+	match := m.matches[data.MatchID]
+	m.mu_matches.Unlock()
+
+	// Lock the match in case the opponent is making the same request
+	match.Mu.Lock()
+	defer match.Mu.Unlock()
+
+	if match.GameServer.ID != oldGameServer.ID {
+		// A new Game Server has already been chosen for the match
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "SUCCESS"})
+		return
+	}
+
+	// Check the health of the Game Server
+	if m.checkServerHealth(data.OldGameServer.URL, 5*time.Second) {
+		// Game Server is healthy, keep it
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "HEALTHY"})
+		return
+	}
+
+	// Deregister the Game Server
+	m.DeregisterGameServer(data.OldGameServer.ID)
+
+	// === TODO Choose a proper backup Game Server and perform necessary backup operations (probably move to a relocateGame function) ===
+	// TODO this is just a temporary fix of choosing the first server
+	log.Println("Finding a replacement Game Server for match", match.MatchID)
+
+	// Get all available game servers
+	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(gameServers) == 0 {
+		log.Println("No game servers available")
+		http.Error(w, "No game servers available", http.StatusInternalServerError)
+		return
+	}
+
+	// Pick the first one
+	gameServer := gameServers[0]
+
+	// Switch the match to the new Game Server
+	match.GameServer = gameServer
+
+	// Broadcast the match change to the backup Matchmakers
+	m.broadcastMatchesChanged()
+
+	// Marshal the match to JSON
+	matchBytes, err := json.Marshal(match)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	// Send a POST request to the game server with the match details
+	res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	defer res.Body.Close()
+
+	log.Printf("Match %s moved to Game Server [%d] %s", match.MatchID, gameServer.ID, gameServer.URL)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "SUCCESS"})
 }
 
 // Handler for a request to update the leaderboard
@@ -664,6 +796,8 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	m.mu_leaderboard.Unlock()
+
+	m.broadcastLeaderboardChanged()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -697,7 +831,89 @@ func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 	m.mu_matches.Unlock()
 	log.Printf("Match %s ended and removed", matchID)
 
+	m.broadcastMatchesChanged()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "match Removed"})
+}
+
+func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[Leaderboard](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setLeaderboard error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_leaderboard.Lock()
+	log.Printf("New leaderboard: %v", data)
+	m.leaderboard = &data
+	m.mu_leaderboard.Unlock()
+}
+
+func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[Queue[string]](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setQueue error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_queue.Lock()
+	m.queue = data
+	m.mu_queue.Unlock()
+}
+
+func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[map[uuid.UUID]*Match](r)
+	if err != nil {
+		errorStr := fmt.Errorf("setQueue error: %v", err)
+		fmt.Println(errorStr)
+		http.Error(w, err.Error(), errStatus)
+		return
+	}
+
+	m.mu_matches.Lock()
+	m.matches = data
+	m.mu_matches.Unlock()
+}
+
+func (m *Matchmaker) broadcast(endpoint string, data any) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	m.otherMatchmakersMu.Lock()
+	for _, server := range m.otherMatchmakers {
+		res, err := http.Post(server.URL+endpoint, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Failed to send a broadcast message to Matchmaker %d, assuming it is down", server.ID)
+			// TODO: Inform name server that this matchmaker is down
+			return
+		}
+		defer res.Body.Close()
+	}
+	m.otherMatchmakersMu.Unlock()
+}
+
+func (m *Matchmaker) broadcastLeaderboardChanged() {
+	m.mu_leaderboard.Lock()
+	m.broadcast("/internal/leaderboard", m.leaderboard)
+	m.mu_leaderboard.Unlock()
+}
+
+func (m *Matchmaker) broadcastQueueChanged() {
+	m.mu_queue.Lock()
+	m.broadcast("/internal/queue", m.queue)
+	m.mu_queue.Unlock()
+}
+
+func (m *Matchmaker) broadcastMatchesChanged() {
+	m.mu_matches.Lock()
+	m.broadcast("/internal/matches", m.matches)
+	m.mu_matches.Unlock()
 }

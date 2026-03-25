@@ -44,6 +44,10 @@ func main() {
 		matchmaker.LeaveQueueRequest(w, r)
 	})
 
+	http.HandleFunc("POST /match/request-new-game-server", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.RequestNewGameServer(w, r)
+	})
+
 	http.HandleFunc("POST /match/updateleaderboard", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.UpdateLeaderboard(w, r)
 	})
@@ -63,6 +67,18 @@ func main() {
 	})
 	http.HandleFunc("POST /internal/leader-election/leader", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.HandleLeaderRequest(w, r)
+	})
+
+	// Replication endpoints
+
+	http.HandleFunc("POST /internal/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetLeaderboard(w, r)
+	})
+	http.HandleFunc("POST /internal/queue", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetQueue(w, r)
+	})
+	http.HandleFunc("POST /internal/matches", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetMatches(w, r)
 	})
 
 	// Register with the Name Server
@@ -98,7 +114,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		}
 
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		newUrl, err := url.Parse(r.URL.Scheme + matchmaker.Leader.URL)
+		newUrl, err := url.Parse(matchmaker.Leader.URL)
 
 		if err != nil {
 			println("Error, could not parse leader url")
@@ -109,7 +125,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
 			matchmaker.InitiateElection()
-			// TODO: Resend the request that failed to reach the leader.
+			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
 
 		proxy.ServeHTTP(w, r)
