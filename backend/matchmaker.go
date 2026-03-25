@@ -744,7 +744,7 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	// Switch the match to the new Game Server
 	match.GameServer = gameServer
 
-	// Boardcast the match change to the backup Matchmakers
+	// Broadcast the match change to the backup Matchmakers
 	m.broadcastMatchesChanged()
 
 	// Marshal the match to JSON
