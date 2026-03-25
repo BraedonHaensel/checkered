@@ -81,12 +81,30 @@ func main() {
 		matchmaker.SetMatches(w, r)
 	})
 
+	http.HandleFunc("GET /internal/request-data", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.PackageData(w, r)
+	})
+
 	// Register with the Name Server
 	log.Println("Matchmaker running on", url)
 	matchmaker.Register(url)
 
 	// Start a leader election
-	go matchmaker.InitiateElection()
+	matchmaker.InitiateElection()
+
+	// Request most recent data 
+	if matchmaker.Leader.ID == matchmaker.ID {
+		// We have become the new leader. We need to request the data from some other server.
+		// Since requests are not closed until everything has been synchronized, we can pull 
+		// from any of the other servers, if one exists.
+		other, err := matchmaker.ChooseRandomOtherServer()
+		if err == nil {
+			matchmaker.RequestUpdatedData(*other)
+		}
+	} else {
+		// There is another authorative leader. We send the message to them explicitly
+		matchmaker.RequestUpdatedData(matchmaker.Leader)
+	}
 
 	err := http.ListenAndServe(*addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
