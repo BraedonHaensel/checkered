@@ -13,6 +13,7 @@ import {
     hasRemainingPieces,
     hasLegalMoves,
     pieceCount,
+    tileIndexToCoordinate,
 } from '../game-utils'
 import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
@@ -195,9 +196,10 @@ const Game = ({
     }
 
     session.on('start', (message) => {
-        console.log(`Game started: ${message.player_color}`)
+        console.log('New game started:', message)
         setGameStatus({ state: 'IN_GAME' })
         updateGameState({
+            ...DEFAULT_GAME_STATE,
             playerColor: message.player_color,
             isYourTurn: message.player_color === PlayerColor.BLACK,
             opponent: message.opponent,
@@ -205,7 +207,7 @@ const Game = ({
     })
 
     session.on('update_state', (message) => {
-        console.log(`Update State`, message)
+        console.log('Game state update:', message)
         setGameState((oldState: GameState) => ({
             ...oldState,
             draw_requested: false,
@@ -238,21 +240,19 @@ const Game = ({
         }))
     })
 
-    const handlePieceMove = (
-        source_index: number,
-        destination_index: number
-    ) => {
-        console.info(
-            `Moving piece from ${source_index} to ${destination_index}`
-        )
+    // Performs a piece move from the source to destination tile indices.
+    const handlePieceMove = (sourceIndex: number, destIndex: number) => {
+        const sourceCoord = tileIndexToCoordinate(sourceIndex)
+        const destCoord = tileIndexToCoordinate(destIndex)
+        console.info(`Moving piece from ${sourceCoord} to ${destCoord}`)
         // Send the move to the server
         session.send({
             type: 'move',
-            source_index,
-            destination_index,
+            source_index: sourceIndex,
+            destination_index: destIndex,
         })
         // Perform the move locally
-        performPieceMove(source_index, destination_index)
+        performPieceMove(sourceIndex, destIndex)
     }
 
     let statusMessage = 'Unknown'

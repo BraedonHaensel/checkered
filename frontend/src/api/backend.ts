@@ -134,7 +134,7 @@ export class Backend {
         matchId: string
     ) {
         try {
-            console.log('Requesting a new Game Server')
+            console.log('Requesting a new Game Server...')
             const raw = await fetch(
                 `${(await this.server()).url}/match/request-new-game-server`,
                 {
@@ -155,8 +155,8 @@ export class Backend {
                 )
                 return
             }
-            const result = await raw.json()
-            console.log(result)
+            const newGameServerRes = await raw.json()
+            console.log('New Game Server response:', newGameServerRes)
         } catch (e) {
             console.error('Failed to request a new Game Server:', e)
         }
@@ -187,10 +187,10 @@ export class Backend {
                     return false
                 }
 
-                const result: JoinQueueResponse = await raw.json()
-                if (result.type === 'ALREADY_IN_QUEUE') {
-                    console.log('Already in queue')
-                } else if (result.type === 'SUCCESS') {
+                const joinQueueRes: JoinQueueResponse = await raw.json()
+                if (joinQueueRes.type === 'ALREADY_IN_QUEUE') {
+                    console.log('Already in the queue')
+                } else if (joinQueueRes.type === 'SUCCESS') {
                     console.log('Successfully joined the queue!')
                 }
             } catch (e) {
@@ -220,23 +220,23 @@ export class Backend {
                     method: 'POST',
                 }
             )
-            const result: PollResponse = await raw.json()
-            console.log(result)
+            const pollRes: PollResponse = await raw.json()
+            console.log('Poll response:', pollRes)
 
             // Check if the player was not in the queue or a game
-            if (result.type === 'NOT_IN_QUEUE') {
+            if (pollRes.type === 'NOT_IN_QUEUE') {
                 console.log('Not in the queue! Rejoining...')
                 this.connectSession(session, user)
                 return
             }
 
             // Check if a game is found
-            if (result.type === 'IN_GAME') {
+            if (pollRes.type === 'IN_GAME') {
                 // Stop the polling interval
                 clearInterval(session.interval)
 
                 // Game found, connect to the Game Server using a WebSocket
-                const wsUrl = `${result.game_server!.url}/ws`
+                const wsUrl = `${pollRes.game_server!.url}/ws`
                 const ws = new WebSocket(wsUrl)
                 console.log(
                     `Attempting WebSocket connection to Game Server: ${wsUrl}`
@@ -245,13 +245,13 @@ export class Backend {
                 ws.addEventListener('close', async (ev: CloseEvent) => {
                     if (!ev.wasClean) {
                         console.log(
-                            'Unclean socket close, Game Server likely crashed'
+                            'Unclean socket close. Game Server likely crashed!'
                         )
 
                         // Request a new Game Server
                         await this.sendNewGameServerRequest(
-                            result.game_server!,
-                            result.match_id!
+                            pollRes.game_server!,
+                            pollRes.match_id!
                         )
 
                         // Attempt a new connection

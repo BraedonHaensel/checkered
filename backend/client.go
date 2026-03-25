@@ -215,6 +215,7 @@ type EnqueueRequest struct {
 	Kind string `json:"type"`
 }
 
+// Handle performing a checkers piece move.
 func (c *Client) handleNewMove(p GameMove) {
 	c.currentGame.mu.Lock()
 	defer c.currentGame.mu.Unlock()
@@ -236,9 +237,12 @@ func (c *Client) handleNewMove(p GameMove) {
 		log.Printf("Error at Marshalling\n")
 		return
 	}
+
 	if !validMove {
+		// Invalid move, send the original game state to the client
 		c.send <- gameStateBytes
 	} else {
+		// Send the new game state to the other player
 		otherPlayer(c.username, c.currentGame).send <- gameStateBytes
 	}
 }
