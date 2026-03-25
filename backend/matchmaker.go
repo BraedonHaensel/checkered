@@ -435,10 +435,10 @@ type GameResultStruct struct {
 }
 
 type Match struct {
-	MatchID     uuid.UUID	`json:"match_id"`
-	RedPlayer   string		`json:"red"`
-	BlackPlayer string		`json:"black"`
-	Gameserver  string		`json:"server"`
+	MatchID     uuid.UUID `json:"match_id"`
+	RedPlayer   string    `json:"red"`
+	BlackPlayer string    `json:"black"`
+	Gameserver  string    `json:"server"`
 }
 
 func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
@@ -494,7 +494,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Player \"%s\" already in queue", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_IN_QUEUE"})
 		return
 	}
 
@@ -544,7 +544,7 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	// Let the user know they're in queue
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(QueueResponse{Type: "In Queue"})
+	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
 }
 
@@ -564,7 +564,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 			log.Printf("User \"%s\" has been matched, sending game server URL: %s", username, match.Gameserver)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(PollResponse{Type: "success", URL: match.Gameserver})
+			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", URL: match.Gameserver})
 			return
 		}
 	}
@@ -583,12 +583,12 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	if alreadyQueued {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(PollResponse{Type: "In Queue"})
+		json.NewEncoder(w).Encode(PollResponse{Type: "IN_QUEUE"})
 		return
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(PollResponse{Type: "Not In Queue"})
+		json.NewEncoder(w).Encode(PollResponse{Type: "NOT_IN_QUEUE"})
 		return
 	}
 
@@ -631,7 +631,7 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(QueueResponse{Type: "Not In Queue"})
+		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_NOT_IN_QUEUE"})
 		return
 	}
 	m.mu_queue.Lock()
@@ -643,7 +643,7 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(QueueResponse{Type: "Left Queue"})
+	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
 }
 
@@ -755,7 +755,6 @@ func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
 	m.mu_matches.Unlock()
 }
 
-
 func (m *Matchmaker) broadcast(endpoint string, data any) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -777,18 +776,18 @@ func (m *Matchmaker) broadcast(endpoint string, data any) {
 
 func (m *Matchmaker) broadcastLeaderboardChanged() {
 	m.mu_leaderboard.Lock()
-	m.broadcast("/internal/leaderboard", m.leaderboard);
+	m.broadcast("/internal/leaderboard", m.leaderboard)
 	m.mu_leaderboard.Unlock()
 }
 
 func (m *Matchmaker) broadcastQueueChanged() {
 	m.mu_queue.Lock()
-	m.broadcast("/internal/queue", m.queue);
+	m.broadcast("/internal/queue", m.queue)
 	m.mu_queue.Unlock()
 }
 
 func (m *Matchmaker) broadcastMatchesChanged() {
 	m.mu_matches.Lock()
-	m.broadcast("/internal/matches", m.matches);
+	m.broadcast("/internal/matches", m.matches)
 	m.mu_matches.Unlock()
 }

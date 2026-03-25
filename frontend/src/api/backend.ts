@@ -11,7 +11,19 @@ const nameServer: BackendServer = {
     id: 0,
 }
 
-const POLL_TIME = 500
+// Join queue response from Matchmaker
+type JoinQueueResponse = {
+    type: 'SUCCESS' | 'ALREADY_IN_QUEUE'
+}
+
+// Interval to poll for the Matchmaker queue status
+const QUEUE_POLL_INTERVAL = 2000
+
+// Poll response type from Matchmaker
+type PollResponse = {
+    type: 'IN_GAME' | 'IN_QUEUE' | 'NOT_IN_QUEUE'
+    url?: string
+}
 
 export class Backend {
     private static _instance: Backend | null = null
@@ -112,27 +124,40 @@ export class Backend {
     }
 
     private async connectSession(session: Session, user: string) {
-        await fetch(`${(await this.server()).url}/queue/add`, {
-            body: JSON.stringify({
-                username: user,
-            }),
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            method: 'POST',
-        })
-        // TODO: check for successful addition to queue.
-        // Waiting for final queuing logic.
-
-        console.log('Added!')
+        try {
+            console.log('Joining the queue...')
+            const raw = await fetch(`${(await this.server()).url}/queue/add`, {
+                body: JSON.stringify({
+                    username: user,
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                method: 'POST',
+            })
+            const result: JoinQueueResponse = await raw.json()
+            if (result.type === 'ALREADY_IN_QUEUE') {
+                console.log('Already in queue')
+            } else if (result.type === 'SUCCESS') {
+                console.log('Successfully joined the queue!')
+            }
+        } catch (e) {
+            console.error('Failed to join queue:', e)
+            // TODO Matchmaker down, try a new one? For now just return
+            return
+        }
 
         session.interval = 0
-        let attempting = false
+        let pollInProgress = false
 
-        const attemptConnection = async () => {
-            console.log('Checking if game was found!')
-            if (attempting) return
-            attempting = true
+        // Function called periodically to poll the Matchmaker for the queueing status
+        const pollMatchmaker = async () => {
+            // Skip if a concurrent poll is in progress
+            if (pollInProgress) return
+
+            // Poll the matchmaker for the current queueing status
+            console.log('Polling the Matchmaker...')
+            pollInProgress = true
             const raw = await fetch(
                 `${(await this.server()).url}/queue/poll?username=${user}`,
                 {
@@ -142,46 +167,51 @@ export class Backend {
                     method: 'POST',
                 }
             )
-            const result = await raw.json()
-
+            const result: PollResponse = await raw.json()
             console.log(result)
 
-            // TODO: We assume the shape of the resulting json
-            // object for now.
-
-            const inGame = result.type === 'success'
-
-            if (inGame) {
-                const wsUrl = result.url
+            // Check if a game is found
+            if (result.type === 'IN_GAME') {
+                // Stop the polling interval
                 clearInterval(session.interval)
-                // setup websocket connection
-                const ws = new WebSocket(`${wsUrl}/ws`)
 
+                // Game found, connect to the Game Server using a WebSocket
+                const wsUrl = `${result.url}/ws`
+                const ws = new WebSocket(wsUrl)
                 console.log(
-                    `Attempting connection to backend game server at ${wsUrl}`
+                    `Attempting WebSocket connection to Game Server: ${wsUrl}`
                 )
 
                 ws.addEventListener('close', (ev: CloseEvent) => {
                     if (!ev.wasClean) {
+                        console.log(
+                            'Unclean socket close, Game Server likely crashed. Rejoining...'
+                        )
                         this.connectSession(session, user)
                     }
                 })
 
                 ws.addEventListener('error', (err) => {
                     console.log('Error Callback', err.type)
+                    console.error(err)
                     ws.close()
                 })
 
                 ws.addEventListener('open', () => {
+                    // Socket connection successful, continue connection setup
                     session.connect(ws, user)
                 })
+            } else if (result.type === 'NOT_IN_QUEUE') {
+                console.log('Not in the queue! Rejoining...')
+                this.connectSession(session, user)
             }
 
-            attempting = false
-            console.log('exit')
+            // Stop blocking concurrent polls
+            pollInProgress = false
         }
 
-        session.interval = setInterval(attemptConnection, POLL_TIME)
+        // Start periodically polling the Matchmaker for the queueing status
+        session.interval = setInterval(pollMatchmaker, QUEUE_POLL_INTERVAL)
     }
 
     public createSession(user: string): Session {

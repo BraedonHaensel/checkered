@@ -55,14 +55,14 @@ const Game = ({
             }
             const newState = arg[0]
             if (prev.state != 'SEARCHING' && newState.state === 'SEARCHING') {
-                console.log('Searching...')
+                console.log('Searching for a game...')
                 session.send({ type: 'enqueue' })
             }
             return newState
         },
         [DEFAULT_GAME_STATUS],
         (i) => {
-            console.log('Searching...')
+            console.log('Searching for a game...')
             session.send({ type: 'enqueue' })
             return i[0]
         }
