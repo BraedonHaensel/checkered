@@ -23,6 +23,7 @@ const QUEUE_POLL_INTERVAL = 2000
 type PollResponse = {
     type: 'IN_GAME' | 'IN_QUEUE' | 'NOT_IN_QUEUE'
     game_server?: BackendServer
+    match_id?: string
 }
 
 export class Backend {
@@ -127,13 +128,17 @@ export class Backend {
      * Sends a request to the Matchmaker for a new Game Server.
      * @param gameServerUrl URL of the original Game Server that has crashed.
      */
-    private async sendNewGameServerRequest(gameServer: BackendServer) {
+    private async sendNewGameServerRequest(
+        gameServer: BackendServer,
+        matchId: string
+    ) {
         try {
             const raw = await fetch(
                 `${(await this.server()).url}/match/request-new-game-server`,
                 {
                     body: JSON.stringify({
-                        old_game_server_id: gameServer.id,
+                        old_game_server: gameServer,
+                        match_id: matchId,
                     }),
                     headers: {
                         'Content-Type': 'application/json',
@@ -232,7 +237,10 @@ export class Backend {
                         )
 
                         // Request a new Game Server
-                        await this.sendNewGameServerRequest(result.game_server!)
+                        await this.sendNewGameServerRequest(
+                            result.game_server!,
+                            result.match_id!
+                        )
 
                         // Attempt a new connection
                         this.connectSession(session, user, false)
