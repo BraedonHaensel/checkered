@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -31,6 +32,11 @@ func main() {
 	// Register with the Name Server
 	log.Println("Game Server running on", url)
 	server.Register(url)
+
+	// Start the ticker for the periodic refresh of the list of other Game Servers
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server.StartOtherGameServersRefreshTicker(ctx)
 
 	// Start the HTTP server
 	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))

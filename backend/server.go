@@ -2,6 +2,7 @@ package checkered
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,12 +15,13 @@ import (
 )
 
 const (
-	INGAME     = "InGame"
-	QUEUING    = "Queuing"
-	SPECTATING = "Spectating"
-	IDLE       = "Idle"
-	writeWait  = 10 * time.Second
-	QUEUE_SIZE = 100
+	INGAME                              = "InGame"
+	QUEUING                             = "Queuing"
+	SPECTATING                          = "Spectating"
+	IDLE                                = "Idle"
+	writeWait                           = 10 * time.Second
+	QUEUE_SIZE                          = 100
+	REFRESH_OTHER_GAME_SERVERS_INTERVAL = 20 * time.Second
 )
 
 type PendingGame struct {
@@ -46,6 +48,10 @@ type GameServer struct {
 
 	// URL of the Name Server
 	nameServerURL string
+
+	// Other Game Servers in the network (does not include itself)
+	otherGameServers   []Server
+	otherGameServersMu sync.Mutex
 
 	pendingGames map[uuid.UUID]*PendingGame
 }
@@ -75,6 +81,60 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
+}
+
+// Refreshes and sets the list of known other Game Servers.
+func (server *GameServer) RefreshOtherGameServersList() {
+	// Get the list of all Game Servers from the Name Server
+	gameServers, err := SendServerListRequest(server.nameServerURL + "/game-servers")
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Filter itself out of the list
+	otherGameServers := []Server{}
+	foundInList := false
+	for i, gameServer := range gameServers {
+		if gameServer.ID == server.ID {
+			otherGameServers = append(gameServers[:i],
+				gameServers[i+1:]...)
+			foundInList = true
+			break
+		}
+	}
+
+	if !foundInList {
+		// Failed to find itself in the Name Server's list, something went wrong
+		log.Fatalf("Game Server %d failed to find itself in the Name Server's list of Game Servers", server.ID)
+	}
+
+	// Set the list of known other Game Servers
+	server.otherGameServersMu.Lock()
+	log.Println("Refreshed the list of other Game Servers")
+	server.otherGameServers = otherGameServers
+	server.otherGameServersMu.Unlock()
+}
+
+// Start the ticker to periodically refresh the list of other Game Servers.
+func (server *GameServer) StartOtherGameServersRefreshTicker(ctx context.Context) {
+	ticker := time.NewTicker(REFRESH_OTHER_GAME_SERVERS_INTERVAL)
+
+	// Initial immediate refresh
+	server.RefreshOtherGameServersList()
+
+	// Periodic refresh routine
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				// Ticker cancelled, return
+				return
+			case <-ticker.C:
+				// Ticker fired, refresh the list of other game servers
+				server.RefreshOtherGameServersList()
+			}
+		}
+	}()
 }
 
 type RegisterMessage struct {

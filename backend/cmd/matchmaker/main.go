@@ -72,9 +72,6 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	// TODO get list of servers from Name Server before/at the start of the election
-	// And have a server refresh loop
-
 	err := http.ListenAndServe(*addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
@@ -95,7 +92,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		// destined for this server specifically (for cross-matchmaker communication),
 		// then we handle the request locally.
 		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
-			log.Println("Handling reuqest locally for endpoint:", r.URL.Path)
+			log.Println("Handling request locally for endpoint:", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
 		}

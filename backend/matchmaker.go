@@ -35,7 +35,7 @@ type Matchmaker struct {
 	// URL of the Name Server
 	nameServerURL string
 
-	// Other Matchmakers in the network
+	// Other Matchmakers in the network (does not include itself)
 	otherMatchmakers   []Server
 	otherMatchmakersMu sync.Mutex
 	// Whether this server is running in the current leader election
