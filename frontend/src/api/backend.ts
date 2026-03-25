@@ -123,28 +123,64 @@ export class Backend {
         this.current = null
     }
 
-    private async connectSession(session: Session, user: string) {
+    /**
+     * Sends a request to the Matchmaker for a new Game Server.
+     * @param gameServerUrl URL of the original Game Server that has crashed.
+     */
+    private async sendNewGameServerRequest(gameServerUrl: string) {
         try {
-            console.log('Joining the queue...')
-            const raw = await fetch(`${(await this.server()).url}/queue/add`, {
-                body: JSON.stringify({
-                    username: user,
-                }),
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                method: 'POST',
-            })
-            const result: JoinQueueResponse = await raw.json()
-            if (result.type === 'ALREADY_IN_QUEUE') {
-                console.log('Already in queue')
-            } else if (result.type === 'SUCCESS') {
-                console.log('Successfully joined the queue!')
-            }
+            const raw = await fetch(
+                `${(await this.server()).url}//match/request-new-game-server`,
+                {
+                    body: JSON.stringify({
+                        old_game_server_url: gameServerUrl,
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'POST',
+                }
+            )
+            const result = await raw.json()
+            // TODO
+            console.log('TODO GOT NEW SERVER REQUEST RESULT:')
+            console.log(result)
         } catch (e) {
-            console.error('Failed to join queue:', e)
-            // TODO Matchmaker down, try a new one? For now just return
-            return
+            console.error('Failed to request a new Game Server:', e)
+        }
+    }
+
+    private async connectSession(
+        session: Session,
+        user: string,
+        joinQueue = true
+    ) {
+        if (joinQueue) {
+            try {
+                console.log('Joining the queue...')
+                const raw = await fetch(
+                    `${(await this.server()).url}/queue/add`,
+                    {
+                        body: JSON.stringify({
+                            username: user,
+                        }),
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        method: 'POST',
+                    }
+                )
+                const result: JoinQueueResponse = await raw.json()
+                if (result.type === 'ALREADY_IN_QUEUE') {
+                    console.log('Already in queue')
+                } else if (result.type === 'SUCCESS') {
+                    console.log('Successfully joined the queue!')
+                }
+            } catch (e) {
+                console.error('Failed to join queue:', e)
+                // TODO Matchmaker down, try a new one? For now just return
+                return
+            }
         }
 
         session.interval = 0
@@ -170,6 +206,13 @@ export class Backend {
             const result: PollResponse = await raw.json()
             console.log(result)
 
+            // Check if the player was not in the queue or a game
+            if (result.type === 'NOT_IN_QUEUE') {
+                console.log('Not in the queue! Rejoining...')
+                this.connectSession(session, user)
+                return
+            }
+
             // Check if a game is found
             if (result.type === 'IN_GAME') {
                 // Stop the polling interval
@@ -182,12 +225,17 @@ export class Backend {
                     `Attempting WebSocket connection to Game Server: ${wsUrl}`
                 )
 
-                ws.addEventListener('close', (ev: CloseEvent) => {
+                ws.addEventListener('close', async (ev: CloseEvent) => {
                     if (!ev.wasClean) {
                         console.log(
-                            'Unclean socket close, Game Server likely crashed. Rejoining...'
+                            'Unclean socket close, Game Server likely crashed'
                         )
-                        this.connectSession(session, user)
+
+                        // Request a new Game Server
+                        await this.sendNewGameServerRequest(result.url!)
+
+                        // Attempt a new connection
+                        this.connectSession(session, user, false)
                     }
                 })
 
@@ -201,9 +249,6 @@ export class Backend {
                     // Socket connection successful, continue connection setup
                     session.connect(ws, user)
                 })
-            } else if (result.type === 'NOT_IN_QUEUE') {
-                console.log('Not in the queue! Rejoining...')
-                this.connectSession(session, user)
             }
 
             // Stop blocking concurrent polls
