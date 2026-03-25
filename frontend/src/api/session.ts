@@ -13,7 +13,7 @@ export class Session {
     private wsConnected: boolean = false
     private queuedMessages: Message[] = []
 
-    public interval?: number;
+    public interval?: number
 
     public constructor() {}
 
@@ -60,8 +60,7 @@ export class Session {
             return
         }
         this.ws.close()
-        if(this.interval) 
-            clearInterval(this.interval)
+        if (this.interval) clearInterval(this.interval)
     }
 
     public connected(): boolean {

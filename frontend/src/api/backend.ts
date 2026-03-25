@@ -11,7 +11,7 @@ const nameServer: BackendServer = {
     id: 0,
 }
 
-const POLL_TIME = 500;
+const POLL_TIME = 500
 
 export class Backend {
     private static _instance: Backend | null = null
@@ -80,11 +80,11 @@ export class Backend {
     }
 
     private async findServers() {
-        const raw = await fetch(nameServer.url + "/matchmakers")
-        const servers = await raw.json() as BackendServer[];
+        const raw = await fetch(nameServer.url + '/matchmakers')
+        const servers = (await raw.json()) as BackendServer[]
 
-        this.servers = servers;
-        console.log(servers);
+        this.servers = servers
+        console.log(servers)
     }
 
     public async server(): Promise<BackendServer> {
@@ -119,42 +119,47 @@ export class Backend {
             headers: {
                 'Content-Type': 'application/json',
             },
-            method: "POST"
-        });
+            method: 'POST',
+        })
         // TODO: check for successful addition to queue.
         // Waiting for final queuing logic.
 
-        console.log("Added!");
+        console.log('Added!')
 
-        session.interval = 0;
-        let attempting = false;
+        session.interval = 0
+        let attempting = false
 
         const attemptConnection = async () => {
-            console.log("Checking if game was found!");
-            if(attempting) return;
-            attempting = true;
-            const raw = await fetch(`${(await this.server()).url}/queue/poll?username=${user}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                method: "POST"
-            });
-            const result = await raw.json();
+            console.log('Checking if game was found!')
+            if (attempting) return
+            attempting = true
+            const raw = await fetch(
+                `${(await this.server()).url}/queue/poll?username=${user}`,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'POST',
+                }
+            )
+            const result = await raw.json()
 
-            console.log(result);
+            console.log(result)
 
-            // TODO: We assume the shape of the resulting json 
+            // TODO: We assume the shape of the resulting json
             // object for now.
 
-            const inGame = result.type === "success";
+            const inGame = result.type === 'success'
 
-            if(inGame) {
-                const wsUrl = result.url;
-                clearInterval(session.interval);
+            if (inGame) {
+                const wsUrl = result.url
+                clearInterval(session.interval)
                 // setup websocket connection
                 const ws = new WebSocket(`${wsUrl}/ws`)
 
-                console.log(`Attempting connection to backend game server at ${wsUrl}`)
+                console.log(
+                    `Attempting connection to backend game server at ${wsUrl}`
+                )
 
                 ws.addEventListener('close', (ev: CloseEvent) => {
                     if (!ev.wasClean) {
@@ -172,20 +177,20 @@ export class Backend {
                 })
             }
 
-            attempting = false;
-            console.log("exit");
+            attempting = false
+            console.log('exit')
         }
 
-        session.interval = setInterval(attemptConnection, POLL_TIME);
+        session.interval = setInterval(attemptConnection, POLL_TIME)
     }
 
     public createSession(user: string): Session {
         const session = new Session()
 
-        this.findServers();
+        this.findServers()
 
-        this.connectSession(session, user);
+        this.connectSession(session, user)
 
-        return session;
+        return session
     }
 }
