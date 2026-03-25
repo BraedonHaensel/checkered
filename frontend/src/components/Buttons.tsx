@@ -24,17 +24,18 @@ export const LeaderboardButton = ({ onClick }: Props) => {
     )
 }
 
-export const DashboardButton = ({
-    onClick,
-    exitsGame,
-}: Props & { exitsGame: boolean }) => {
+export const HomeButton = ({ onClick }: Props) => {
     return (
-        <CustomButton
-            onClick={onClick}
-            type={exitsGame ? 'danger' : 'normal'}
-            hint={exitsGame ? 'Forfeit' : 'Home'}
-        >
-            {exitsGame ? <Flag /> : <Home />}
+        <CustomButton onClick={onClick} hint={'Home'}>
+            <Home />
+        </CustomButton>
+    )
+}
+
+export const ForfeitButton = ({ onClick }: Props) => {
+    return (
+        <CustomButton onClick={onClick} type={'danger'} hint={'Forfeit'}>
+            <Flag />
         </CustomButton>
     )
 }
@@ -68,7 +69,7 @@ const CustomButton = ({
     hint,
 }: {
     children: ReactNode
-    type: ButtonType
+    type?: ButtonType
     onClick: () => void
     hint: string
 }) => {

@@ -20,8 +20,9 @@ import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { GameDetails } from '../components/GameDetails'
 import {
-    DashboardButton,
     DrawButton,
+    ForfeitButton,
+    HomeButton,
     SearchButton,
 } from '../components/Buttons'
 
@@ -333,19 +334,17 @@ const Game = ({
                             : gameState.previousMoves
                     }
                 >
-                    <DashboardButton
-                        onClick={() =>
-                            gameStatus.state === 'IN_GAME'
-                                ? forfeit()
-                                : setPage(Page.HOME)
-                        }
-                        exitsGame={gameStatus.state === 'IN_GAME'}
-                    />
                     {gameStatus.state === 'IN_GAME' && (
-                        <DrawButton
-                            onClick={() => draw()}
-                            requested={gameState.draw_requested}
-                        />
+                        <>
+                            <ForfeitButton onClick={forfeit} />
+                            <DrawButton
+                                onClick={() => draw()}
+                                requested={gameState.draw_requested}
+                            />
+                        </>
+                    )}
+                    {gameStatus.state !== 'IN_GAME' && (
+                        <HomeButton onClick={() => setPage(Page.HOME)} />
                     )}
                     {gameStatus.state === 'FINISHED' && (
                         <SearchButton onClick={resetState} />
