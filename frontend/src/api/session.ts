@@ -99,15 +99,16 @@ export const useSession = (
         }
     }, [onCreate])
 
-    // Ends the current session.
+    // Closes the current session.
     const closeSession = () => {
+        console.log('Closing the current session')
         const session = sessionRef.current!
-        const onDisconnect = onCreate?.(session)
 
+        // Cancel any queueing in case the session was closed while queueing
         Backend.instance().cancelQueueing(session, username)
 
         if (session.connected()) {
-            console.log('Ending the current session')
+            const onDisconnect = onCreate?.(session)
             onDisconnect?.(session)
             session.end()
         }
