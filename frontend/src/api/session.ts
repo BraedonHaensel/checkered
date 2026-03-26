@@ -103,6 +103,9 @@ export const useSession = (
     const closeSession = () => {
         const session = sessionRef.current!
         const onDisconnect = onCreate?.(session)
+
+        Backend.instance().cancelQueueing(session, username)
+
         if (session.connected()) {
             console.log('Ending the current session')
             onDisconnect?.(session)

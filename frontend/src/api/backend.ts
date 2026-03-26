@@ -327,25 +327,17 @@ export class Backend {
     }
 
     /**
-     * Closes a connection session.
+     * Cancels any ongoing queueing.
      * @param session Session to close.
      * @param username Username of the user for the session.
-     * @param gameStatus Current status of the game.
      */
-    public closeSession(
-        session: Session,
-        username: string,
-        gameStatus?: GameStatus
-    ) {
-        if (gameStatus?.state === 'SEARCHING') {
-            // Cancel polling
-            clearInterval(session.interval)
-            console.log('Cancelled polling the queue')
+    public cancelQueueing(session: Session, username: string) {
+        // Cancel polling
+        clearInterval(session.interval)
+        console.log('Cancelled polling the queue')
 
-            // Leave the queue
-            this.sendLeaveQueueRequest(username)
-        }
-        session.end()
+        // Leave the queue
+        this.sendLeaveQueueRequest(username)
     }
 
     public createSession(user: string): Session {

@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useReducer, useState } from 'react'
 import GameBoard from '../components/GameBoard'
 import { Page, PlayerColor, TileState } from '../enums'
 import {
@@ -25,7 +25,6 @@ import {
     HomeButton,
     SearchButton,
 } from '../components/Buttons'
-import { Backend } from '../api/backend'
 
 const DEFAULT_GAME_STATE: GameState = {
     tileStates: getNewBoardTileStates(),
@@ -70,14 +69,6 @@ const Game = ({
             return i[0]
         }
     )
-
-    useEffect(() => {
-        return () => {
-            // Close the session on unmount.
-            Backend.instance().closeSession(session, username, gameStatus)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
@@ -357,7 +348,12 @@ const Game = ({
                         </>
                     )}
                     {gameStatus.state !== 'IN_GAME' && (
-                        <HomeButton onClick={() => setPage(Page.HOME)} />
+                        <HomeButton
+                            onClick={() => {
+                                closeSession()
+                                setPage(Page.HOME)
+                            }}
+                        />
                     )}
                     {gameStatus.state === 'FINISHED' && (
                         <SearchButton onClick={resetState} />
