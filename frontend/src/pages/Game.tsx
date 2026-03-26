@@ -1,4 +1,4 @@
-import { useReducer, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import GameBoard from '../components/GameBoard'
 import { Page, PlayerColor, TileState } from '../enums'
 import {
@@ -25,6 +25,7 @@ import {
     HomeButton,
     SearchButton,
 } from '../components/Buttons'
+import { Backend } from '../api/backend'
 
 const DEFAULT_GAME_STATE: GameState = {
     tileStates: getNewBoardTileStates(),
@@ -37,13 +38,13 @@ const DEFAULT_GAME_STATE: GameState = {
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
 const Game = ({
-    user,
+    username,
     setPage,
 }: {
-    user: string
+    username: string
     setPage: (page: Page) => void
 }) => {
-    const session = useSession(user)
+    const session = useSession(username)
     const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE)
     const [gameStatus, setGameStatus] = useReducer<
         GameStatus,
@@ -69,6 +70,13 @@ const Game = ({
             return i[0]
         }
     )
+
+    useEffect(() => {
+        return () => {
+            // Close the session on unmount.
+            Backend.instance().closeSession(session, username, gameStatus)
+        }
+    }, [session, username, gameStatus])
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
@@ -315,7 +323,7 @@ const Game = ({
                         />
                     </div>
                     <PlayerCard
-                        player={user}
+                        player={username}
                         color={gameState.playerColor}
                         captured={captured}
                         lost={lost}

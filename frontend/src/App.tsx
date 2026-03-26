@@ -9,8 +9,8 @@ const pages: Record<
     Page,
     React.ComponentType<{
         setPage: (p: Page) => void
-        user: string
-        setUser: (user: string) => void
+        username: string
+        setUsername: (user: string) => void
     }>
 > = {
     [Page.HOME]: Home,
@@ -20,7 +20,7 @@ const pages: Record<
 }
 
 function App() {
-    const [user, setUser] = useState<string>('')
+    const [username, setUsername] = useState<string>('')
     const [page, setPage] = useState<Page>(Page.LOGIN)
 
     // Adding body style speficially for the login page - just for the background
@@ -40,7 +40,7 @@ function App() {
     const PageComponent = pages[page]
     return (
         <>
-            <PageComponent setPage={setPage} user={user} setUser={setUser} />
+            <PageComponent setPage={setPage} username={username} setUsername={setUsername} />
         </>
     )
 }

@@ -2,10 +2,10 @@ import { useRef } from 'react'
 import { Page } from '../enums'
 
 const Login = ({
-    setUser,
+    setUsername,
     setPage,
 }: {
-    setUser: (user: string) => void
+    setUsername: (username: string) => void
     setPage: (page: Page) => void
 }) => {
     const usernameRef = useRef<HTMLInputElement>(null)
@@ -32,7 +32,7 @@ const Login = ({
                             className="loginButton"
                             onClick={() => {
                                 if (usernameRef.current?.value) {
-                                    setUser(usernameRef.current.value || '')
+                                    setUsername(usernameRef.current.value || '')
                                     setPage(Page.HOME)
                                 }
                             }}

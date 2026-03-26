@@ -3,15 +3,15 @@ import type { GetLeaderboardResponse } from '../api/request'
 import { getLeaderboard } from '../api/api'
 import { LeaderboardTable } from '../components/Leaderboard'
 import { Page } from '../enums'
-import { DashboardButton } from '../components/Buttons'
+import { HomeButton } from '../components/Buttons'
 import { GameDetails } from '../components/GameDetails'
 
 const Leaderboard = ({
     setPage,
-    user,
+    username,
 }: {
     setPage: (page: Page) => void
-    user: string
+    username: string
 }) => {
     const [leaderboard, setLeaderboard] =
         useState<GetLeaderboardResponse | null>(null)
@@ -36,11 +36,8 @@ const Leaderboard = ({
                         </>
                     )}
                 </div>
-                <GameDetails statusMessage={`Welcome, ${user}`}>
-                    <DashboardButton
-                        onClick={() => setPage(Page.HOME)}
-                        exitsGame={false}
-                    />
+                <GameDetails statusMessage={`Welcome, ${username}`}>
+                    <HomeButton onClick={() => setPage(Page.HOME)} />
                 </GameDetails>
             </div>
         </div>

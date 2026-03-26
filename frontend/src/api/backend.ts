@@ -1,3 +1,4 @@
+import type { GameStatus } from '../game-state'
 import type { Request, Response } from './request'
 import { Session } from './session'
 
@@ -14,6 +15,11 @@ const nameServer: BackendServer = {
 // Join queue response from Matchmaker
 type JoinQueueResponse = {
     type: 'SUCCESS' | 'ALREADY_IN_QUEUE'
+}
+
+// Leave queue response from Matchmaker.
+type LeaveQueueResponse = {
+    type: 'SUCCESS' | 'ALREADY_NOT_IN_QUEUE'
 }
 
 // Interval to poll for the Matchmaker queue status
@@ -162,43 +168,47 @@ export class Backend {
         }
     }
 
-    private async connectSession(
-        session: Session,
-        user: string,
-        joinQueue = true
-    ) {
-        if (joinQueue) {
-            try {
-                console.log('Joining the queue...')
-                const raw = await fetch(
-                    `${(await this.server()).url}/queue/add`,
-                    {
-                        body: JSON.stringify({
-                            username: user,
-                        }),
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        method: 'POST',
-                    }
-                )
-                if (!raw.ok) {
-                    console.error('Failed to join queue:', raw.text())
-                    return false
-                }
-
-                const joinQueueRes: JoinQueueResponse = await raw.json()
-                if (joinQueueRes.type === 'ALREADY_IN_QUEUE') {
-                    console.log('Already in the queue')
-                } else if (joinQueueRes.type === 'SUCCESS') {
-                    console.log('Successfully joined the queue!')
-                }
-            } catch (e) {
-                console.error('Failed to join queue:', e)
-                // TODO Matchmaker down, try a new one? For now just return
+    /**
+     * Sends a request to add a user to the queue.
+     * @param username Username of the user leaving the queue.
+     */
+    private async sendJoinQueueRequest(username: string) {
+        try {
+            console.log('Joining the queue...')
+            const raw = await fetch(`${(await this.server()).url}/queue/add`, {
+                body: JSON.stringify({
+                    username: username,
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                method: 'POST',
+            })
+            if (!raw.ok) {
+                console.error('Failed to join the queue:', await raw.text())
                 return
             }
+
+            const joinQueueRes: JoinQueueResponse = await raw.json()
+            if (joinQueueRes.type === 'ALREADY_IN_QUEUE') {
+                console.log('Already in the queue')
+            } else if (joinQueueRes.type === 'SUCCESS') {
+                console.log('Successfully joined the queue!')
+            }
+        } catch (e) {
+            console.error('Failed to join the queue:', e)
+            // TODO Matchmaker down, try a new one? For now just return
+            return
         }
+    }
+
+    private async connectSession(
+        session: Session,
+        username: string,
+        joinQueue = true
+    ) {
+        // Add the user to the matchmaking queue
+        if (joinQueue) await this.sendJoinQueueRequest(username)
 
         session.interval = 0
         let pollInProgress = false
@@ -212,7 +222,7 @@ export class Backend {
             console.log('Polling the Matchmaker...')
             pollInProgress = true
             const raw = await fetch(
-                `${(await this.server()).url}/queue/poll?username=${user}`,
+                `${(await this.server()).url}/queue/poll?username=${username}`,
                 {
                     headers: {
                         'Content-Type': 'application/json',
@@ -226,7 +236,7 @@ export class Backend {
             // Check if the player was not in the queue or a game
             if (pollRes.type === 'NOT_IN_QUEUE') {
                 console.log('Not in the queue! Rejoining...')
-                this.connectSession(session, user)
+                this.connectSession(session, username)
                 return
             }
 
@@ -255,7 +265,7 @@ export class Backend {
                         )
 
                         // Attempt a new connection
-                        this.connectSession(session, user, false)
+                        this.connectSession(session, username, false)
                     }
                 })
 
@@ -267,7 +277,7 @@ export class Backend {
 
                 ws.addEventListener('open', () => {
                     // Socket connection successful, continue connection setup
-                    session.connect(ws, user)
+                    session.connect(ws, username)
                 })
             }
 
@@ -278,6 +288,63 @@ export class Backend {
         // Start periodically polling the Matchmaker for the queueing status
         session.interval = setInterval(pollMatchmaker, QUEUE_POLL_INTERVAL)
         pollMatchmaker()
+    }
+
+    /**
+     * Sends a request to remove a user from the queue.
+     * @param username Username of the user leaving the queue.
+     */
+    private async sendLeaveQueueRequest(username: string) {
+        try {
+            console.log('Leaving the queue...')
+            const raw = await fetch(
+                `${(await this.server()).url}/queue/leave`,
+                {
+                    body: JSON.stringify({
+                        username: username,
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'POST',
+                }
+            )
+            if (!raw.ok) {
+                console.error('Failed to leave queue:', await raw.text())
+                return
+            }
+
+            const joinQueueRes: LeaveQueueResponse = await raw.json()
+            if (joinQueueRes.type === 'ALREADY_NOT_IN_QUEUE') {
+                console.log('Already not in the queue')
+            } else if (joinQueueRes.type === 'SUCCESS') {
+                console.log('Successfully left the queue!')
+            }
+        } catch (e) {
+            console.error('Failed to leave the queue:', e)
+            return
+        }
+    }
+
+    /**
+     * Closes a connection session.
+     * @param session Session to close.
+     * @param username Username of the user for the session.
+     * @param gameStatus Current status of the game.
+     */
+    public closeSession(
+        session: Session,
+        username: string,
+        gameStatus: GameStatus
+    ) {
+        if (gameStatus.state === 'SEARCHING') {
+            // Cancel polling
+            clearInterval(session.interval)
+            console.log('Cancelled polling the queue')
+
+            // Leave the queue
+            this.sendLeaveQueueRequest(username)
+        }
     }
 
     public createSession(user: string): Session {
