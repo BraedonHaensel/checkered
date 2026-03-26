@@ -319,7 +319,7 @@ func (server *GameServer) ServerLoop() {
 			log.Println("Attempted unregister")
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
-			_, exists := server.games[gameResult.gameID]
+			_, exists := server.games[gameResult.GameID]
 
 			if exists {
 				// server.Mu_leaderboard.Lock()
@@ -352,12 +352,7 @@ func (server *GameServer) ServerLoop() {
 					matchmakingServer.ID,
 				)
 
-				gameResultMessage := GameResultStruct{
-					GameID: gameResult.gameID,
-					Winner: *gameResult.winner,
-					Loser:  *gameResult.loser,
-				}
-				gameResultBytes, err := json.Marshal(gameResultMessage)
+				gameResultBytes, err := json.Marshal(gameResult)
 				if err != nil {
 					log.Printf("Failed to marshal result: %s", err)
 					break
@@ -373,7 +368,7 @@ func (server *GameServer) ServerLoop() {
 				}
 				log.Printf("Leaderboard updated!")
 				defer res.Body.Close()
-				endMatchRequest := EndMatchRequest{MatchID: gameResult.gameID}
+				endMatchRequest := EndMatchRequest{MatchID: gameResult.GameID}
 				endMatchRequestBytes, err := json.Marshal(endMatchRequest)
 				if err != nil {
 					log.Printf("Failed to marshal end game request: %s", err)
@@ -388,9 +383,9 @@ func (server *GameServer) ServerLoop() {
 					log.Printf("Failed to send end game %s", err)
 				}
 
-				delete(server.games, gameResult.gameID)
+				delete(server.games, gameResult.GameID)
 			} else {
-				log.Printf("Game %s does not exist\n", gameResult.gameID)
+				log.Printf("Game %s does not exist\n", gameResult.GameID)
 			}
 		}
 	}

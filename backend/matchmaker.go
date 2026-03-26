@@ -449,13 +449,6 @@ type EndMatchResponse struct {
 	Type string `json:"type"`
 }
 
-// Fix - export the fields and add json tags
-type GameResultStruct struct {
-	GameID uuid.UUID `json:"game_id"`
-	Winner string    `json:"winner"`
-	Loser  string    `json:"loser"`
-}
-
 type Match struct {
 	MatchID     uuid.UUID  `json:"match_id"`
 	RedPlayer   string     `json:"red"`
@@ -779,29 +772,21 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 
 // Handler for a request to update the leaderboard
 func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
-
-	data, err, errStatus := parseJsonRequestData[GameResultStruct](r)
+	data, err, errStatus := parseJsonRequestData[GameResult](r)
 	if err != nil {
 		http.Error(w, err.Error(), errStatus)
 		return
 	}
-	log.Printf("Game Result: (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
 
 	// Update the leaderboard
 	m.mu_leaderboard.Lock()
-	m.leaderboard.AddPlayerToLeaderboard(data.Winner)
-	m.leaderboard.AddPlayerToLeaderboard(data.Loser)
-	for i := range m.leaderboard.Board {
-		if m.leaderboard.Board[i].Username == data.Winner {
-			m.leaderboard.Board[i].Wins++
-		}
-		if m.leaderboard.Board[i].Username == data.Loser {
-			m.leaderboard.Board[i].Losses++
-		}
-	}
+	isNotADraw := m.leaderboard.UpdateLeaderboard(data)
 	m.mu_leaderboard.Unlock()
 
-	m.broadcastLeaderboardChanged()
+	if isNotADraw {
+		// Broadcast the new leaderboard if the game did not end in a draw
+		m.broadcastLeaderboardChanged()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
