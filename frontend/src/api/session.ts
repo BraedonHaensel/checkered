@@ -60,6 +60,7 @@ export class Session {
             return
         }
         this.ws.close()
+        console.log('WebSocket session closed')
         if (this.interval) clearInterval(this.interval)
     }
 
@@ -69,14 +70,20 @@ export class Session {
 }
 
 export const useSession = (
-    user: string,
+    username: string,
     onCreate?: (session: Session) => void | ((session: Session) => void)
-): Session => {
+): [Session, () => void, () => void] => {
     const sessionRef = useRef<Session | null>(null)
 
+    const createSession = () => {
+        console.log('Creating a new session')
+        sessionRef.current = Backend.instance().createSession(username)
+    }
+
+    // eslint-disable-next-line react-hooks/refs
     if (!sessionRef.current) {
-        // safe because ref survives strict-mode replays
-        sessionRef.current = Backend.instance().createSession(user)
+        // eslint-disable-next-line react-hooks/refs
+        createSession()
     }
 
     useEffect(() => {
@@ -84,7 +91,7 @@ export const useSession = (
         const onDisconnect = onCreate?.(session)
 
         return () => {
-            if (sessionRef.current?.connected()) {
+            if (session.connected()) {
                 onDisconnect?.(session)
                 session.end()
                 sessionRef.current = null
@@ -92,5 +99,26 @@ export const useSession = (
         }
     }, [onCreate])
 
-    return sessionRef.current!
+    // Ends the current session.
+    const closeSession = () => {
+        const session = sessionRef.current!
+        const onDisconnect = onCreate?.(session)
+        if (session.connected()) {
+            console.log('Ending the current session')
+            onDisconnect?.(session)
+            session.end()
+        }
+    }
+
+    // Resets to a new session.
+    const resetSession = () => {
+        // End the previous sesesion
+        closeSession()
+
+        // Create a new session
+        createSession()
+    }
+
+    // eslint-disable-next-line react-hooks/refs
+    return [sessionRef.current!, closeSession, resetSession]
 }

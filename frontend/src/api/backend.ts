@@ -335,9 +335,9 @@ export class Backend {
     public closeSession(
         session: Session,
         username: string,
-        gameStatus: GameStatus
+        gameStatus?: GameStatus
     ) {
-        if (gameStatus.state === 'SEARCHING') {
+        if (gameStatus?.state === 'SEARCHING') {
             // Cancel polling
             clearInterval(session.interval)
             console.log('Cancelled polling the queue')
@@ -345,6 +345,7 @@ export class Backend {
             // Leave the queue
             this.sendLeaveQueueRequest(username)
         }
+        session.end()
     }
 
     public createSession(user: string): Session {

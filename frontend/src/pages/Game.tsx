@@ -44,7 +44,7 @@ const Game = ({
     username: string
     setPage: (page: Page) => void
 }) => {
-    const session = useSession(username)
+    const [session, closeSession, resetSession] = useSession(username)
     const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE)
     const [gameStatus, setGameStatus] = useReducer<
         GameStatus,
@@ -76,7 +76,8 @@ const Game = ({
             // Close the session on unmount.
             Backend.instance().closeSession(session, username, gameStatus)
         }
-    }, [session, username, gameStatus])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     const updateGameState = (updates: Partial<GameState>) => {
         setGameState((prev) => ({ ...prev, ...updates }))
@@ -202,6 +203,8 @@ const Game = ({
     const resetState = () => {
         updateGameState(DEFAULT_GAME_STATE)
         setGameStatus(DEFAULT_GAME_STATUS)
+        // Create a new session
+        resetSession()
     }
 
     session.on('start', (message) => {
@@ -247,6 +250,8 @@ const Game = ({
             draw_requested: false,
             isYourTurn: false,
         }))
+        // Game over, end the session
+        closeSession()
     })
 
     // Performs a piece move from the source to destination tile indices.
