@@ -3,7 +3,7 @@ import type { GetLeaderboardResponse } from '../api/request'
 export const LeaderboardTable = ({
     leaderboard,
 }: {
-    leaderboard: GetLeaderboardResponse
+    leaderboard: GetLeaderboardResponse['board'] | null
 }) => {
     return (
         <table className="text-left">
@@ -15,7 +15,7 @@ export const LeaderboardTable = ({
                 </tr>
             </thead>
             <tbody>
-                {(leaderboard.board || []).map((row, i) => (
+                {(leaderboard || []).map((row, i) => (
                     <tr key={i}>
                         <td>{row.username}</td>
                         <td>{row.wins}</td>
