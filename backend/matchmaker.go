@@ -427,9 +427,9 @@ type QueueResponse struct {
 }
 
 type PollResponse struct {
-	Type       string    `json:"type"`
-	GameServer Server    `json:"game_server"`
-	MatchID    uuid.UUID `json:"match_id,omitempty"`
+	Type       string     `json:"type"`
+	GameServer *Server    `json:"game_server,omitempty"`
+	MatchID    *uuid.UUID `json:"match_id,omitempty"`
 }
 
 type RequestNewGameServerRequest struct {
@@ -587,7 +587,7 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 			log.Printf("User \"%s\" has been matched, sending game server [%d] %s", username, match.GameServer.ID, match.GameServer.URL)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", GameServer: match.GameServer, MatchID: matchID})
+			json.NewEncoder(w).Encode(PollResponse{Type: "IN_GAME", GameServer: &match.GameServer, MatchID: &matchID})
 			return
 		}
 	}

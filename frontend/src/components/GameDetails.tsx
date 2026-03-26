@@ -1,6 +1,11 @@
 import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
-import { isJumpMove, tileIndexToCol, tileIndexToRow } from '../game-utils'
+import {
+    isJumpMove,
+    tileIndexToCol,
+    tileIndexToCoordinate,
+    tileIndexToRow,
+} from '../game-utils'
 import type { ReactNode } from 'react'
 
 type Props = {
@@ -17,15 +22,6 @@ export const GameDetails = ({
     moves,
 }: Props) => {
     const moveNotations: string[] = []
-
-    // Gets the column letter and row number coordinates for a tile index
-    const tileIndexToCoordinate = (tileIndex: number): string => {
-        const rowNum = 8 - tileIndexToRow(tileIndex)
-        const colIndex = tileIndexToCol(tileIndex)
-        const colLetter = String.fromCharCode(65 + colIndex)
-
-        return `${colLetter}${rowNum}`
-    }
 
     // Gets the coordiante notation for a move
     const moveToCoordinateNotation = (move: PreviousMove) => {
