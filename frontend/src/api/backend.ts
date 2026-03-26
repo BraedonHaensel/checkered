@@ -210,6 +210,8 @@ export class Backend {
             }
 
             const joinQueueRes: JoinQueueResponse = await raw.json()
+            if (!joinQueueRes.type)
+                throw Error('Invalid response: missing type')
             if (joinQueueRes.type === 'ALREADY_IN_QUEUE') {
                 console.log('Already in the queue')
             } else if (joinQueueRes.type === 'SUCCESS') {
@@ -224,6 +226,46 @@ export class Backend {
                 await this.sendJoinQueueRequest(username)
             } else {
                 console.error('Failed to join the queue:', e)
+            }
+        }
+    }
+
+    /**
+     * Sends a poll request for the user's current queueing status.
+     * @param username Username of the user to poll.
+     * @returns A promise that resolves to a poll response, or undefined if an
+     * unexpected error occurs.
+     */
+    private async sendPollRequest(
+        username: string
+    ): Promise<PollResponse | undefined> {
+        try {
+            console.log('Polling the Matchmaker...')
+            const raw = await fetch(
+                `${(await this.server()).url}/queue/poll?username=${username}`,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'POST',
+                }
+            )
+            const pollRes: PollResponse = await raw.json()
+            if (!pollRes.type) throw Error('Invalid response: missing type')
+            console.log('Poll response:', pollRes)
+            return pollRes
+        } catch (e) {
+            if (e instanceof TypeError) {
+                // Matchmaker connection down, try again with a new server
+                console.error('Matchmaker connection failed:', e)
+                this.handleServerError()
+                await sleep(2000)
+                return await this.sendPollRequest(username)
+            } else {
+                console.error(
+                    "Failed to poll for the user's queueing status:",
+                    e
+                )
             }
         }
     }
@@ -245,19 +287,9 @@ export class Backend {
             if (pollInProgress) return
 
             // Poll the matchmaker for the current queueing status
-            console.log('Polling the Matchmaker...')
             pollInProgress = true
-            const raw = await fetch(
-                `${(await this.server()).url}/queue/poll?username=${username}`,
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    method: 'POST',
-                }
-            )
-            const pollRes: PollResponse = await raw.json()
-            console.log('Poll response:', pollRes)
+            const pollRes = await this.sendPollRequest(username)
+            if (!pollRes) return
 
             // Check if the player was not in the queue or a game
             if (pollRes.type === 'NOT_IN_QUEUE') {
@@ -340,10 +372,12 @@ export class Backend {
                 return
             }
 
-            const joinQueueRes: LeaveQueueResponse = await raw.json()
-            if (joinQueueRes.type === 'ALREADY_NOT_IN_QUEUE') {
+            const leaveQueueRes: LeaveQueueResponse = await raw.json()
+            if (!leaveQueueRes.type)
+                throw Error('Invalid response: missing type')
+            if (leaveQueueRes.type === 'ALREADY_NOT_IN_QUEUE') {
                 console.log('Already not in the queue')
-            } else if (joinQueueRes.type === 'SUCCESS') {
+            } else if (leaveQueueRes.type === 'SUCCESS') {
                 console.log('Successfully left the queue!')
             }
         } catch (e) {
