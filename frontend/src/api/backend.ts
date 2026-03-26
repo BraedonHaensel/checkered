@@ -1,3 +1,4 @@
+import { sleep } from '../lib/utils'
 import type { Request, Response } from './request'
 import { Session } from './session'
 
@@ -97,21 +98,40 @@ export class Backend {
         return (await raw.json()) as Extract<Response, { type: RequestType }>
     }
 
-    private async findServers() {
-        const raw = await fetch(nameServer.url + '/matchmakers')
-        const servers = (await raw.json()) as BackendServer[]
-
-        this.servers = servers
-        console.log(servers)
+    // Get the list of Matchmakers from the Name Server
+    private async populateServerList() {
+        try {
+            const raw = await fetch(nameServer.url + '/matchmakers')
+            const matchmakers = (await raw.json()) as BackendServer[]
+            this.servers = matchmakers
+            console.log('Matchmakers:', matchmakers)
+        } catch (e) {
+            if (e instanceof TypeError) {
+                // Name Server connection down, try again
+                console.error('Name Server connection failed:', e)
+                await sleep(2000)
+                await this.populateServerList()
+            } else {
+                console.error('Failed to populate the Matchmakers list:', e)
+            }
+        }
     }
 
+    // Get a Matchmaker server
     public async server(): Promise<BackendServer> {
         if (this.current !== null) {
             return this.current
         }
 
-        if (this.servers.length == 0) {
-            await this.findServers()
+        // Populate the list of Matchmakers
+        if (this.servers.length === 0) {
+            console.log('Populating the Matchmakers list...')
+            await this.populateServerList()
+            while (this.servers.length === 0) {
+                console.error('No Matchmakers found')
+                await sleep(2000)
+                await this.populateServerList()
+            }
         }
 
         const best = this.servers.shift()
@@ -126,6 +146,7 @@ export class Backend {
     }
 
     public handleServerError() {
+        // Stop using the current backend server
         this.current = null
     }
 
@@ -195,9 +216,15 @@ export class Backend {
                 console.log('Successfully joined the queue!')
             }
         } catch (e) {
-            console.error('Failed to join the queue:', e)
-            // TODO Matchmaker down, try a new one? For now just return
-            return
+            if (e instanceof TypeError) {
+                // Matchmaker connection down, try again with a new server
+                console.error('Matchmaker connection failed:', e)
+                this.handleServerError()
+                await sleep(2000)
+                await this.sendJoinQueueRequest(username)
+            } else {
+                console.error('Failed to join the queue:', e)
+            }
         }
     }
 
@@ -339,13 +366,10 @@ export class Backend {
         this.sendLeaveQueueRequest(username)
     }
 
+    // Creates and connects a session
     public createSession(user: string): Session {
         const session = new Session()
-
-        this.findServers()
-
         this.connectSession(session, user)
-
         return session
     }
 }

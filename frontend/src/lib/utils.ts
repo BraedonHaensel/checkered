@@ -9,3 +9,13 @@ import { twMerge } from 'tailwind-merge'
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }
+
+/**
+ * Sleep for a given amount of time.
+ * @param ms Number of milliseconds to sleep.
+ * @returns A promise that resolves after the given amount of time.
+ */
+export function sleep(ms: number): Promise<void> {
+    // SOURCE: https://stackoverflow.com/questions/951021/what-is-the-javascript-version-of-sleep
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}

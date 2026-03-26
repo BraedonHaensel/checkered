@@ -860,9 +860,9 @@ func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[Queue[string]](r)
 	if err != nil {
-		errorStr := fmt.Errorf("setQueue error: %v", err)
-		fmt.Println(errorStr)
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("setQueue error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
