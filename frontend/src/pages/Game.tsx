@@ -195,7 +195,7 @@ const Game = ({
         updateGameState(DEFAULT_GAME_STATE)
         setGameStatus(DEFAULT_GAME_STATUS)
         // Create a new session
-        resetSession()
+        resetSession(false)
     }
 
     session.on('start', (message) => {
@@ -242,7 +242,7 @@ const Game = ({
             isYourTurn: false,
         }))
         // Game over, end the session
-        closeSession()
+        closeSession(false)
     })
 
     // Performs a piece move from the source to destination tile indices.
@@ -350,7 +350,7 @@ const Game = ({
                     {gameStatus.state !== 'IN_GAME' && (
                         <HomeButton
                             onClick={() => {
-                                closeSession()
+                                closeSession(gameStatus.state === 'SEARCHING')
                                 setPage(Page.HOME)
                             }}
                         />

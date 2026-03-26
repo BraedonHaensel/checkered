@@ -3,6 +3,7 @@ import type { Message } from './message'
 import { Backend } from './backend'
 
 export class Session {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private handlers: Record<string, (msg: any) => void> = {
         registered: () => {
             this.wsConnected = true
@@ -22,6 +23,7 @@ export class Session {
 
         const type = data.type
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
         const handler = this.handlers[type] || ((_: any) => {})
 
         handler(data)
@@ -72,7 +74,11 @@ export class Session {
 export const useSession = (
     username: string,
     onCreate?: (session: Session) => void | ((session: Session) => void)
-): [Session, () => void, () => void] => {
+): [
+    Session,
+    (cancelQueueing?: boolean) => void,
+    (cancelQueueing?: boolean) => void,
+] => {
     const sessionRef = useRef<Session | null>(null)
 
     const createSession = () => {
@@ -100,14 +106,14 @@ export const useSession = (
     }, [onCreate])
 
     // Closes the current session.
-    const closeSession = () => {
-        console.log('Closing the current session')
+    const closeSession = (cancelQueueing = true) => {
         const session = sessionRef.current!
 
-        // Cancel any queueing in case the session was closed while queueing
-        Backend.instance().cancelQueueing(session, username)
+        // Cancel any queueing
+        if (cancelQueueing) Backend.instance().cancelQueueing(session, username)
 
         if (session.connected()) {
+            console.log('Closing the current session')
             const onDisconnect = onCreate?.(session)
             onDisconnect?.(session)
             session.end()
@@ -115,9 +121,9 @@ export const useSession = (
     }
 
     // Resets to a new session.
-    const resetSession = () => {
+    const resetSession = (cancelQueueing = true) => {
         // End the previous sesesion
-        closeSession()
+        closeSession(cancelQueueing)
 
         // Create a new session
         createSession()
