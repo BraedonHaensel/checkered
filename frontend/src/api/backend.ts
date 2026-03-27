@@ -9,7 +9,7 @@ export type BackendServer = {
 
 const getNameServerAddress = async (): Promise<string> => {
     const ns = import.meta.env.APP_NAMESERVER_URL;
-    console.log(ns)
+    console.log("Using nameserver located at:", ns)
     if(ns)
         return ns
     return "http://localhost:9000"
