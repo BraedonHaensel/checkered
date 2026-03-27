@@ -28,7 +28,7 @@ func main() {
 	godotenv.Load("../../.env")
 	godotenv.Load("../../../.env")
 
-	addr := Checkered.ParseStringOption(*addr, "", ":4000")
+	addr := Checkered.ParseStringOption(*addr, "APP_MATCHMAKER_BIND", ":4000")
 	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
 
 	log.Printf("Using name server located at %s\n", nameServerURL)
