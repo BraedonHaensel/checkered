@@ -228,75 +228,8 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 					color = "black"
 				}
 
-				gameResult := GameResult{
-					GameID: game.match.MatchID,
-					Winner: &client.username,
-					Loser: &opponentUsername,
-				}
+				server.HandlePlayerDisconnect(matchID, client, color, opponentUsername)
 
-				gameEndMessage := GameEndMessage{
-					Kind: "game_end",
-					Winner: color,
-				}
-
-				marshalled, err := json.Marshal(gameEndMessage)
-
-				if err != nil {
-					log.Println("Failed to marshall data for game end message to client")
-				}
-				defer (func() {
-					log.Println("Informing client game has ended prematurely.")
-					client.send <- marshalled
-				})()
-				
-				matchmakingServers, err := SendServerListRequest(
-					server.nameServerURL + "/matchmakers",
-				)
-				if err != nil {
-					log.Printf("Failed to fetch game servers: %s", err)
-					return
-				}
-				if len(matchmakingServers) == 0 {
-					log.Println("No match making servers available")
-					return
-				}
-				matchmakingServer := matchmakingServers[0]
-				log.Printf(
-					"Selected match making server: %s (ID: %d)",
-					matchmakingServer.URL,
-					matchmakingServer.ID,
-				)
-
-				gameResultBytes, err := json.Marshal(gameResult)
-				if err != nil {
-					log.Printf("Failed to marshal result: %s", err)
-					return
-				}
-				res, err := http.Post(
-					matchmakingServer.URL+"/match/updateleaderboard",
-					"application/json",
-					bytes.NewBuffer(gameResultBytes),
-				)
-				if err != nil {
-					log.Printf("Failed to send game results to match making server: %s", err)
-					return
-				}
-				log.Printf("Leaderboard updated!")
-				defer res.Body.Close()
-				endMatchRequest := EndMatchRequest{MatchID: gameResult.GameID}
-				endMatchRequestBytes, err := json.Marshal(endMatchRequest)
-				if err != nil {
-					log.Printf("Failed to marshal end game request: %s", err)
-					return
-				}
-				res, err = http.Post(
-					matchmakingServer.URL+"/match/end",
-					"application/json",
-					bytes.NewBuffer(endMatchRequestBytes),
-				)
-				if err != nil {
-					log.Printf("Failed to send end game %s", err)
-				}
 				return
 			}
 		})
@@ -306,6 +239,79 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	// If the other player has registered start the game
 	log.Printf("Starting game: %s", pendingGame.match.MatchID)
 	server.StartGame(pendingGame)
+}
+
+func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Client, clientColor string, opponentUsername string) {
+	gameResult := GameResult{
+		GameID: matchID,
+		Winner: &client.username,
+		Loser: &opponentUsername,
+	}
+
+	gameEndMessage := GameEndMessage{
+		Kind: "game_end",
+		Winner: clientColor,
+	}
+
+	marshalled, err := json.Marshal(gameEndMessage)
+
+	if err != nil {
+		log.Println("Failed to marshall data for game end message to client")
+	}
+	defer (func() {
+		log.Println("Informing client game has ended prematurely.")
+		client.send <- marshalled
+	})()
+
+	matchmakingServers, err := SendServerListRequest(
+		server.nameServerURL + "/matchmakers",
+		)
+	if err != nil {
+		log.Printf("Failed to fetch game servers: %s", err)
+		return
+	}
+	if len(matchmakingServers) == 0 {
+		log.Println("No match making servers available")
+		return
+	}
+	matchmakingServer := matchmakingServers[0]
+	log.Printf(
+		"Selected match making server: %s (ID: %d)",
+		matchmakingServer.URL,
+		matchmakingServer.ID,
+		)
+
+	gameResultBytes, err := json.Marshal(gameResult)
+	if err != nil {
+		log.Printf("Failed to marshal result: %s", err)
+		return
+	}
+	res, err := http.Post(
+		matchmakingServer.URL+"/match/updateleaderboard",
+		"application/json",
+		bytes.NewBuffer(gameResultBytes),
+		)
+	if err != nil {
+		log.Printf("Failed to send game results to match making server: %s", err)
+		return
+	}
+	log.Printf("Leaderboard updated!")
+	defer res.Body.Close()
+	endMatchRequest := EndMatchRequest{MatchID: gameResult.GameID}
+	endMatchRequestBytes, err := json.Marshal(endMatchRequest)
+	if err != nil {
+		log.Printf("Failed to marshal end game request: %s", err)
+		return
+	}
+	res, err = http.Post(
+		matchmakingServer.URL+"/match/end",
+		"application/json",
+		bytes.NewBuffer(endMatchRequestBytes),
+		)
+	if err != nil {
+		log.Printf("Failed to send end game %s", err)
+	}
+
 }
 
 func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
