@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -122,12 +124,25 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 
 		proxy := httputil.NewSingleHostReverseProxy(newUrl)
 
+		// Need to deep clone the request so that we do not 
+		// double read if we handle locally.
+		// https://stackoverflow.com/questions/62017146/http-request-clone-is-not-deep-clone
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			// Something went really wrong. We can't clone the data for whatevery reason,
+			// assume we are out of memory and crash 
+			panic("Failed to clone request body")
+		}
+		r2 := r.Clone(r.Context())
+		r2.Body = io.NopCloser(bytes.NewReader(body))
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
 			matchmaker.InitiateElection()
 			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
 
-		proxy.ServeHTTP(w, r)
+		proxy.ServeHTTP(w, r2)
 	})
 }

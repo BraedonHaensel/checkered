@@ -52,11 +52,20 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
 	for i := range lb.Board {
 		if lb.Board[i].Username == *result.Winner {
 			lb.Board[i].Wins++
+			log.Printf("New score: %s = w%d/l%d\n", 
+				*result.Winner, 
+				lb.Board[i].Wins,
+				lb.Board[i].Losses)
 		}
 		if lb.Board[i].Username == *result.Loser {
 			lb.Board[i].Losses++
+			log.Printf("New score: %s = w%d/l%d\n", 
+				*result.Loser, 
+				lb.Board[i].Wins,
+				lb.Board[i].Losses)
 		}
 	}
+	
 	return true
 }
 
