@@ -13,12 +13,20 @@ const Leaderboard = ({
     setPage: (page: Page) => void
     username: string
 }) => {
-    const [leaderboard, setLeaderboard] =
-        useState<GetLeaderboardResponse | null>(null)
+    const [leaderboard, setLeaderboard] = useState<
+        GetLeaderboardResponse['board'] | null
+    >(null)
 
     useEffect(() => {
-        getLeaderboard().then((result) => setLeaderboard(result))
-    }, [setLeaderboard])
+        getLeaderboard().then((result) => {
+            const board = result.board
+            if (!board.some((entry) => entry.username === username)) {
+                // Add self to leaderboard
+                board.push({ username, wins: 0, losses: 0 })
+            }
+            setLeaderboard(board)
+        })
+    }, [setLeaderboard, username])
 
     return (
         <div className="grid h-lvh grid-rows-[min-content_1fr] gap-5 p-5">

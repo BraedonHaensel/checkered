@@ -3,6 +3,7 @@ package checkered
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -16,6 +17,7 @@ type LeaderboardEntry struct {
 	Losses   int    `json:"losses"`
 }
 
+// Adds a player to the leaderboard if they are not in it already
 func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
 	for i := range lb.Board {
 		if lb.Board[i].Username == username {
@@ -30,21 +32,32 @@ func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
 	})
 }
 
-func (lb *Leaderboard) UpdateLeaderboard(result GameResult) {
-	if result.loser == nil || result.winner == nil {
-		return
+// Updates the leaderboard for a game result. Returns false if it's a draw, true otherwise
+func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
+	if result.Winner == nil || result.Loser == nil {
+		// Game ended in a draw, no leaderboard update required
+		log.Printf("Game Result: (game=%s, draw)", result.GameID)
+		return false
 	}
 
-	lb.AddPlayerToLeaderboard(*result.winner)
-	lb.AddPlayerToLeaderboard(*result.loser)
+	winner := *result.Winner
+	loser := *result.Loser
+	log.Printf("Game Result: (game=%s, winner=%s, loser=%s)", result.GameID, winner, loser)
+
+	// Ensure each player is in the leaderboard
+	lb.AddPlayerToLeaderboard(*result.Winner)
+	lb.AddPlayerToLeaderboard(*result.Loser)
+
+	// Update the win/loss scores for each player
 	for i := range lb.Board {
-		if lb.Board[i].Username == *result.winner {
+		if lb.Board[i].Username == *result.Winner {
 			lb.Board[i].Wins++
 		}
-		if lb.Board[i].Username == *result.loser {
+		if lb.Board[i].Username == *result.Loser {
 			lb.Board[i].Losses++
 		}
 	}
+	return true
 }
 
 // / return a json payload of the current leaderboard

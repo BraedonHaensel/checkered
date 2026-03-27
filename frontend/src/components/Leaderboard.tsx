@@ -3,7 +3,7 @@ import type { GetLeaderboardResponse } from '../api/request'
 export const LeaderboardTable = ({
     leaderboard,
 }: {
-    leaderboard: GetLeaderboardResponse
+    leaderboard: GetLeaderboardResponse['board'] | null
 }) => {
     return (
         <table className="text-left">

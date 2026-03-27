@@ -2,6 +2,7 @@ package checkered
 
 import (
 	"encoding/json"
+	"log"
 	"math"
 	"sync"
 
@@ -526,10 +527,14 @@ func (game *Game) handleGameEnd() {
 	}
 	// tell the server the result to update the leaderboard
 	gameResult := GameResult{
-		gameID: game.gameID,
-		winner: &winnerUsername,
-		loser:  &loserUsername,
+		GameID: game.gameID,
+		Winner: &winnerUsername,
+		Loser:  &loserUsername,
 	}
+
+	// Send the game result to the Matchmaker
+	log.Printf("Sending game result to matchmaker: (game=%s, winner=%s, loser=%s)",
+		game.gameID, winnerUsername, loserUsername)
 	game.resultChan <- gameResult
 }
 
@@ -547,10 +552,13 @@ func (game *Game) handleGameDraw() {
 
 	// tell the server the result to update the leaderboard
 	gameResult := GameResult{
-		gameID: game.gameID,
-		winner: nil,
-		loser:  nil,
+		GameID: game.gameID,
+		Winner: nil, // nil winner indicates a draw
+		Loser:  nil,
 	}
+
+	// Send the game result to the Matchmaker
+	log.Printf("Sending game result to matchmaker: (game=%s, draw)", game.gameID)
 	game.resultChan <- gameResult
 }
 
@@ -569,9 +577,9 @@ type GameMove struct {
 }
 
 type GameResult struct {
-	gameID uuid.UUID
-	// username of the winner
-	winner *string
-	// username of the loser
-	loser *string
+	GameID uuid.UUID `json:"game_id"`
+	// Winner username, or nil if it's a draw
+	Winner *string   `json:"winner,omitempty"`
+	// Loser username, or nil if it's a draw
+	Loser  *string   `json:"loser,omitempty"`
 }
