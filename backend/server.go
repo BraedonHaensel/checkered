@@ -257,7 +257,7 @@ func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Clien
 	marshalled, err := json.Marshal(gameEndMessage)
 
 	if err != nil {
-		log.Println("Failed to marshall data for game end message to client")
+		log.Println("Failed to marshal data for game end message to client")
 	}
 	defer (func() {
 		log.Println("Informing client game has ended prematurely.")
