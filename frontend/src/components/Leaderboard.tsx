@@ -15,7 +15,7 @@ export const LeaderboardTable = ({
                 </tr>
             </thead>
             <tbody>
-                {(leaderboard.board || [])
+                {(leaderboard || [])
                     .sort((a, b) => {
                         // Sort by most wins
                         if (a.wins != b.wins) return b.wins - a.wins
