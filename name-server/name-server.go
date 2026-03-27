@@ -294,7 +294,7 @@ func main() {
 	godotenv.Load("../../.env")
 	godotenv.Load("../../../.env")
 
-	addr := ParseStringOption(*addr, "NAMESERVER_URL", ":9000")
+	addr := ParseStringOption(*addr, "APP_NAMESERVER_URL", ":9000")
 
 	// Request handlers
 	http.HandleFunc("/matchmakers", handleGetMatchmakers)

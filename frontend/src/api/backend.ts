@@ -7,8 +7,16 @@ export type BackendServer = {
     id: number
 }
 
+const getNameServerAddress = async (): Promise<string> => {
+    const ns = import.meta.env.APP_NAMESERVER_URL;
+    console.log(ns)
+    if(ns)
+        return ns
+    return "http://localhost:9000"
+}
+
 const nameServer: BackendServer = {
-    url: 'http://localhost:9000/',
+    url: await getNameServerAddress(),
     id: 0,
 }
 
