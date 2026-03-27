@@ -11,22 +11,33 @@ import (
 	"strings"
 
 	Checkered "github.com/akeuben/checkered"
+	"github.com/joho/godotenv"
 )
 
 // Setting local addresses including the default nameserver
 var (
-	addr          = flag.String("addr", ":4000", "http service address")
-	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+	addr          = flag.String("addr", "", "http service address")
+	nameServerURL = flag.String("ns", "", "full Name Server URL")
 )
 
 func main() {
-
 	// Reading command line
 	flag.Parse()
-	url := Checkered.GetFullURL(*addr)
+	godotenv.Load(".env") 
+	godotenv.Load("../.env")
+	godotenv.Load("../../.env")
+	godotenv.Load("../../../.env")
+
+	addr := Checkered.ParseStringOption(*addr, "", ":4000")
+	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "NAMESERVER_URL", "http://localhost:9000")
+
+	log.Printf("Using name server located at %s\n", nameServerURL)
+	
+	url := Checkered.GetFullURL(addr)
+	
 
 	// Instantiating a new matchmaker object
-	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
+	matchmaker := Checkered.NewMatchmaker(url, nameServerURL)
 
 	// ---------------------------------------------
 
@@ -90,7 +101,7 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	err := http.ListenAndServe(*addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
+	err := http.ListenAndServe(addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
