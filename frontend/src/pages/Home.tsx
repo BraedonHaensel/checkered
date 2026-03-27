@@ -8,10 +8,10 @@ import { getNewBoardTileStates } from '../game-utils'
 
 const Home = ({
     setPage,
-    user,
+    username,
 }: {
     setPage: (page: Page) => void
-    user: string
+    username: string
 }) => {
     // Array with the state of each of the 32 playable dark tiles in the checkers board
     const gameState: GameState = {
@@ -42,14 +42,14 @@ const Home = ({
                         />
                     </div>
                     <PlayerCard
-                        player={user}
+                        player={username}
                         color={PlayerColor.BLACK}
                         captured={0}
                         lost={0}
                         turn={false}
                     />
                 </div>
-                <GameDetails statusMessage={`Welcome, ${user}`}>
+                <GameDetails statusMessage={`Welcome, ${username}`}>
                     <SearchButton onClick={() => setPage(Page.GAME)} />
                     <LeaderboardButton
                         onClick={() => setPage(Page.LEADERBOARD)}

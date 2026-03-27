@@ -20,8 +20,9 @@ import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { GameDetails } from '../components/GameDetails'
 import {
-    DashboardButton,
     DrawButton,
+    ForfeitButton,
+    HomeButton,
     SearchButton,
 } from '../components/Buttons'
 
@@ -36,13 +37,13 @@ const DEFAULT_GAME_STATE: GameState = {
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
 const Game = ({
-    user,
+    username,
     setPage,
 }: {
-    user: string
+    username: string
     setPage: (page: Page) => void
 }) => {
-    const session = useSession(user)
+    const [session, closeSession, resetSession] = useSession(username)
     const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE)
     const [gameStatus, setGameStatus] = useReducer<
         GameStatus,
@@ -193,6 +194,8 @@ const Game = ({
     const resetState = () => {
         updateGameState(DEFAULT_GAME_STATE)
         setGameStatus(DEFAULT_GAME_STATUS)
+        // Create a new session
+        resetSession(false)
     }
 
     session.on('start', (message) => {
@@ -238,6 +241,8 @@ const Game = ({
             draw_requested: false,
             isYourTurn: false,
         }))
+        // Game over, end the session
+        closeSession(false)
     })
 
     // Performs a piece move from the source to destination tile indices.
@@ -314,7 +319,7 @@ const Game = ({
                         />
                     </div>
                     <PlayerCard
-                        player={user}
+                        player={username}
                         color={gameState.playerColor}
                         captured={captured}
                         lost={lost}
@@ -333,18 +338,21 @@ const Game = ({
                             : gameState.previousMoves
                     }
                 >
-                    <DashboardButton
-                        onClick={() =>
-                            gameStatus.state === 'IN_GAME'
-                                ? forfeit()
-                                : setPage(Page.HOME)
-                        }
-                        exitsGame={gameStatus.state === 'IN_GAME'}
-                    />
                     {gameStatus.state === 'IN_GAME' && (
-                        <DrawButton
-                            onClick={() => draw()}
-                            requested={gameState.draw_requested}
+                        <>
+                            <ForfeitButton onClick={forfeit} />
+                            <DrawButton
+                                onClick={() => draw()}
+                                requested={gameState.draw_requested}
+                            />
+                        </>
+                    )}
+                    {gameStatus.state !== 'IN_GAME' && (
+                        <HomeButton
+                            onClick={() => {
+                                closeSession(gameStatus.state === 'SEARCHING')
+                                setPage(Page.HOME)
+                            }}
                         />
                     )}
                     {gameStatus.state === 'FINISHED' && (

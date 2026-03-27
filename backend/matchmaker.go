@@ -336,7 +336,9 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 	// Parse the elected Matchmaker's ID from the request
 	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("HandleElectionRequest error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 	id := otherMatchmaker.ID
@@ -374,7 +376,9 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	// Parse the Matchmaker's ID from the request
 	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("HandleLeaderRequest error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -492,11 +496,12 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 
 // Handler for a request to join the queue
 func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
-
 	// Reading the data in the request
 	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("AddToQueue error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -535,7 +540,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		m.mu_queue.Unlock()
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
-			log.Printf("Failed to create match: %s", err)
+			errMsg := fmt.Sprintf("Failed to create match: %v", err)
+			log.Println(errMsg)
+			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
 		m.mu_matches.Lock()
@@ -545,7 +552,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		// Marshal the match to JSON
 		matchBytes, err := json.Marshal(match)
 		if err != nil {
-			log.Printf("Failed to marshal match: %s", err)
+			errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
+			log.Println(errMsg)
+			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
 
@@ -554,7 +563,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		// Send a POST request to the game server with the match details
 		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
-			log.Printf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+			errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+			log.Println(errMsg)
+			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
 		defer res.Body.Close()
@@ -634,7 +645,9 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	// Reading the data in the reuest
 	data, err, errStatus := parseJsonRequestData[QueueRequest](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("LeaveQueueRequest error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -687,8 +700,9 @@ func (m *Matchmaker) checkServerHealth(url string, timeout time.Duration) bool {
 func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[RequestNewGameServerRequest](r)
 	if err != nil {
-		log.Println("Errrr", err)
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("RequestNewGameServer error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 	oldGameServer := data.OldGameServer
@@ -778,7 +792,9 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	data, err, errStatus := parseJsonRequestData[GameResultStruct](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("UpdateLeaderboard error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 	log.Printf("Game Result: (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
@@ -808,7 +824,9 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[EndMatchRequest](r)
 	if err != nil {
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("EndMatch error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -841,9 +859,9 @@ func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[Leaderboard](r)
 	if err != nil {
-		errorStr := fmt.Errorf("setLeaderboard error: %v", err)
-		fmt.Println(errorStr)
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("SetLeaderboard error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -856,9 +874,9 @@ func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[Queue[string]](r)
 	if err != nil {
-		errorStr := fmt.Errorf("setQueue error: %v", err)
-		fmt.Println(errorStr)
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("SetQueue error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
@@ -870,9 +888,9 @@ func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
 func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[map[uuid.UUID]*Match](r)
 	if err != nil {
-		errorStr := fmt.Errorf("setQueue error: %v", err)
-		fmt.Println(errorStr)
-		http.Error(w, err.Error(), errStatus)
+		errMsg := fmt.Errorf("SetMatches error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
 
