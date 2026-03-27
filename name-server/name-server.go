@@ -9,12 +9,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
+
+	"github.com/joho/godotenv"
 )
 
 // Name Server address flag
-var addr = flag.String("addr", ":9000", "http service address")
+var addr = flag.String("addr", "", "http service address")
 
 // Incrementing IDs to assign to the next registered server
 var (
@@ -77,6 +81,8 @@ func getFullURL(addr string) string {
 
 		localAddress := conn.LocalAddr().(*net.UDPAddr)
 		return "http://" + localAddress.IP.String() + addr
+	} else if strings.HasPrefix(addr, "http://") {
+		return addr
 	} else {
 		// Add "http://" to the address
 		return "http://" + addr
@@ -102,6 +108,22 @@ func parseJsonRequestData[T any](req *http.Request) (T, error, int) {
 		return data, fmt.Errorf("invalid request data: %w", err), http.StatusBadRequest
 	}
 	return data, nil, 0
+}
+
+// Determines the proper value of a given option. Priority goes in the following order:
+// 1. `flagValue` is checked,
+// 2. `envName` is looked up as an environment variable
+// 3. `value` is used.
+// The first successful branch will be the output of the function
+func ParseStringOption(flagValue string, envName string, value string) string {
+	if flagValue != "" { return flagValue }
+
+	if envName != "" {
+		env, success := os.LookupEnv(envName)
+		if(success) { return env }
+	}
+
+	return value
 }
 
 // GET /matchmakers - Gets the list of known Matchmaker servers.
@@ -249,9 +271,28 @@ func handleDeregisterGameServer(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("Game Server deregistered successfully."))
 }
 
+func getAddr(urlS string) string {
+	if strings.HasPrefix(urlS, "http") {
+		url, err := url.Parse(urlS)
+		if err != nil {
+			panic("Invalid url for server")
+		}
+		return url.Host
+	}
+
+	return urlS
+}
+
 // Run the Name Server.
 func main() {
+	// Reading command line
 	flag.Parse()
+	godotenv.Load(".env") 
+	godotenv.Load("../.env")
+	godotenv.Load("../../.env")
+	godotenv.Load("../../../.env")
+
+	addr := ParseStringOption(*addr, "APP_NAMESERVER_URL", ":9000")
 
 	// Request handlers
 	http.HandleFunc("/matchmakers", handleGetMatchmakers)
@@ -261,9 +302,9 @@ func main() {
 	http.HandleFunc("POST /deregister/matchmaker", handleDeregisterMatchmaker)
 	http.HandleFunc("POST /deregister/game-server", handleDeregisterGameServer)
 
-	url := getFullURL(*addr)
+	url := getFullURL(addr)
 	log.Println("Name Server running on", url)
-	err := http.ListenAndServe(*addr, CORSMiddleware(http.DefaultServeMux))
+	err := http.ListenAndServe(getAddr(url), CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

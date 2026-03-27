@@ -7,20 +7,31 @@ import (
 	"net/http"
 
 	Checkered "github.com/akeuben/checkered"
+	"github.com/joho/godotenv"
 )
 
 var (
-	addr          = flag.String("addr", ":5000", "http service address")
-	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+	addr          = flag.String("addr", "", "http service address")
+	nameServerURL = flag.String("ns", "", "full Name Server URL")
 )
 
 func main() {
 	// Reading command line
 	flag.Parse()
-	url := Checkered.GetFullURL(*addr)
+	godotenv.Load(".env") 
+	godotenv.Load("../.env")
+	godotenv.Load("../../.env")
+	godotenv.Load("../../../.env")
+
+	addr := Checkered.ParseStringOption(*addr, "APP_GAMESERVER_BIND", ":4000")
+	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
+
+	log.Printf("Using name server located at %s\n", nameServerURL)
+	
+	url := Checkered.GetFullURL(addr)
 
 	// Create the server object
-	server := Checkered.InitServer(*nameServerURL)
+	server := Checkered.InitServer(nameServerURL)
 
 	// Start the server loop and register handlers
 	go server.ServerLoop()
@@ -46,7 +57,7 @@ func main() {
 	server.StartOtherGameServersRefreshTicker(ctx)
 
 	// Start the HTTP server
-	err := http.ListenAndServe(*addr, Checkered.CORSMiddleware(http.DefaultServeMux))
+	err := http.ListenAndServe(addr, Checkered.CORSMiddleware(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

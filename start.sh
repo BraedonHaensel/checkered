@@ -5,7 +5,6 @@ GAME_SERVERS=${2:-3}
 
 BASE_PORT_MATCHMAKER=4000
 BASE_PORT_GAMESERVER=5000
-NS_ADDR="http://localhost:9000"
 
 PIDS=()
 
@@ -50,8 +49,7 @@ for ((i=1; i<=MATCHMAKERS; i++)); do
   (
     cd backend || exit 1
     go run cmd/matchmaker/main.go \
-      --addr ":$PORT" \
-      -ns "$NS_ADDR" 2>&1 | prefix_output "matchmaker:$i"
+      --addr ":$PORT" 2>&1 | prefix_output "matchmaker:$i"
   ) &
 
   PIDS+=($!)
@@ -64,8 +62,7 @@ for ((i=1; i<=GAME_SERVERS; i++)); do
   (
     cd backend || exit 1
     go run cmd/game-server/main.go \
-      --addr ":$PORT" \
-      -ns "$NS_ADDR" 2>&1 | prefix_output "game-server:$i"
+      --addr ":$PORT" 2>&1 | prefix_output "game-server:$i"
   ) &
 
   PIDS+=($!)
