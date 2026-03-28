@@ -1,5 +1,13 @@
 # Checkered
 
+## Create the .env files
+
+Create the `.env` file by copying the `.env.example` file with this command:
+
+```bash
+cp .env.example .env
+```
+
 ## Frontend
 
 Frontend is written using Vite/React.js.

@@ -24,17 +24,18 @@ export const LeaderboardButton = ({ onClick }: Props) => {
     )
 }
 
-export const DashboardButton = ({
-    onClick,
-    exitsGame,
-}: Props & { exitsGame: boolean }) => {
+export const HomeButton = ({ onClick }: Props) => {
     return (
-        <CustomButton
-            onClick={onClick}
-            type={exitsGame ? 'danger' : 'normal'}
-            hint={exitsGame ? 'Forfeit' : 'Home'}
-        >
-            {exitsGame ? <Flag /> : <Home />}
+        <CustomButton onClick={onClick} hint={'Home'}>
+            <Home />
+        </CustomButton>
+    )
+}
+
+export const ForfeitButton = ({ onClick }: Props) => {
+    return (
+        <CustomButton onClick={onClick} type={'danger'} hint={'Forfeit'}>
+            <Flag />
         </CustomButton>
     )
 }
@@ -68,7 +69,7 @@ const CustomButton = ({
     hint,
 }: {
     children: ReactNode
-    type: ButtonType
+    type?: ButtonType
     onClick: () => void
     hint: string
 }) => {
@@ -76,7 +77,7 @@ const CustomButton = ({
         <button
             onClick={onClick}
             data-hint={hint}
-            className={`relative flex items-center justify-center hover:after:absolute hover:after:bottom-[calc(100%+10px)] hover:after:left-[50%] hover:after:block hover:after:w-max hover:after:transform-[translateX(-50%)] hover:after:rounded-md hover:after:bg-neutral-400 hover:after:p-1 hover:after:text-black hover:after:content-[attr(data-hint)] ${type && 'flex-grow'} ${colors[type]}`}
+            className={`relative flex items-center justify-center hover:after:absolute hover:after:bottom-[calc(100%+10px)] hover:after:left-[50%] hover:after:block hover:after:w-max hover:after:transform-[translateX(-50%)] hover:after:rounded-md hover:after:bg-neutral-400 hover:after:p-1 hover:after:text-black hover:after:content-[attr(data-hint)] ${type && 'grow'} ${colors[type]}`}
         >
             {children}
         </button>

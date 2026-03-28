@@ -3,6 +3,7 @@ import type { Message } from './message'
 import { Backend } from './backend'
 
 export class Session {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private handlers: Record<string, (msg: any) => void> = {
         registered: () => {
             this.wsConnected = true
@@ -13,7 +14,7 @@ export class Session {
     private wsConnected: boolean = false
     private queuedMessages: Message[] = []
 
-    public interval?: number;
+    public interval?: number
 
     public constructor() {}
 
@@ -22,6 +23,7 @@ export class Session {
 
         const type = data.type
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
         const handler = this.handlers[type] || ((_: any) => {})
 
         handler(data)
@@ -60,8 +62,8 @@ export class Session {
             return
         }
         this.ws.close()
-        if(this.interval) 
-            clearInterval(this.interval)
+        console.log('WebSocket session closed')
+        if (this.interval) clearInterval(this.interval)
     }
 
     public connected(): boolean {
@@ -70,14 +72,24 @@ export class Session {
 }
 
 export const useSession = (
-    user: string,
+    username: string,
     onCreate?: (session: Session) => void | ((session: Session) => void)
-): Session => {
+): [
+    Session,
+    (cancelQueueing?: boolean) => void,
+    (cancelQueueing?: boolean) => void,
+] => {
     const sessionRef = useRef<Session | null>(null)
 
+    const createSession = () => {
+        console.log('Creating a new session')
+        sessionRef.current = Backend.instance().createSession(username)
+    }
+
+    // eslint-disable-next-line react-hooks/refs
     if (!sessionRef.current) {
-        // safe because ref survives strict-mode replays
-        sessionRef.current = Backend.instance().createSession(user)
+        // eslint-disable-next-line react-hooks/refs
+        createSession()
     }
 
     useEffect(() => {
@@ -85,7 +97,7 @@ export const useSession = (
         const onDisconnect = onCreate?.(session)
 
         return () => {
-            if (sessionRef.current?.connected()) {
+            if (session.connected()) {
                 onDisconnect?.(session)
                 session.end()
                 sessionRef.current = null
@@ -93,5 +105,30 @@ export const useSession = (
         }
     }, [onCreate])
 
-    return sessionRef.current!
+    // Closes the current session.
+    const closeSession = (cancelQueueing = true) => {
+        const session = sessionRef.current!
+
+        // Cancel any queueing
+        if (cancelQueueing) Backend.instance().cancelQueueing(session, username)
+
+        if (session.connected()) {
+            console.log('Closing the current session')
+            const onDisconnect = onCreate?.(session)
+            onDisconnect?.(session)
+            session.end()
+        }
+    }
+
+    // Resets to a new session.
+    const resetSession = (cancelQueueing = true) => {
+        // End the previous sesesion
+        closeSession(cancelQueueing)
+
+        // Create a new session
+        createSession()
+    }
+
+    // eslint-disable-next-line react-hooks/refs
+    return [sessionRef.current!, closeSession, resetSession]
 }

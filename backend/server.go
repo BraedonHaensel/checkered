@@ -2,6 +2,7 @@ package checkered
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,12 +15,13 @@ import (
 )
 
 const (
-	INGAME     = "InGame"
-	QUEUING    = "Queuing"
-	SPECTATING = "Spectating"
-	IDLE       = "Idle"
-	writeWait  = 10 * time.Second
-	QUEUE_SIZE = 100
+	INGAME                              = "InGame"
+	QUEUING                             = "Queuing"
+	SPECTATING                          = "Spectating"
+	IDLE                                = "Idle"
+	writeWait                           = 10 * time.Second
+	QUEUE_SIZE                          = 100
+	REFRESH_OTHER_GAME_SERVERS_INTERVAL = 20 * time.Second
 )
 
 type PendingGame struct {
@@ -47,10 +49,11 @@ type GameServer struct {
 	// URL of the Name Server
 	nameServerURL string
 
-	pendingGames map[uuid.UUID]*PendingGame
+	// Other Game Servers in the network (does not include itself)
+	otherGameServers   []Server
+	otherGameServersMu sync.Mutex
 
-	// Consistency related attributes
-	inQueue Queue[]
+	pendingGames map[uuid.UUID]*PendingGame
 }
 
 func InitServer(nameServerURL string) *GameServer {
@@ -96,6 +99,60 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
+}
+
+// Refreshes and sets the list of known other Game Servers.
+func (server *GameServer) RefreshOtherGameServersList() {
+	// Get the list of all Game Servers from the Name Server
+	gameServers, err := SendServerListRequest(server.nameServerURL + "/game-servers")
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Filter itself out of the list
+	otherGameServers := []Server{}
+	foundInList := false
+	for i, gameServer := range gameServers {
+		if gameServer.ID == server.ID {
+			otherGameServers = append(gameServers[:i],
+				gameServers[i+1:]...)
+			foundInList = true
+			break
+		}
+	}
+
+	if !foundInList {
+		// Failed to find itself in the Name Server's list, something went wrong
+		log.Fatalf("Game Server %d failed to find itself in the Name Server's list of Game Servers", server.ID)
+	}
+
+	// Set the list of known other Game Servers
+	server.otherGameServersMu.Lock()
+	log.Println("Refreshed the list of other Game Servers")
+	server.otherGameServers = otherGameServers
+	server.otherGameServersMu.Unlock()
+}
+
+// Start the ticker to periodically refresh the list of other Game Servers.
+func (server *GameServer) StartOtherGameServersRefreshTicker(ctx context.Context) {
+	ticker := time.NewTicker(REFRESH_OTHER_GAME_SERVERS_INTERVAL)
+
+	// Initial immediate refresh
+	server.RefreshOtherGameServersList()
+
+	// Periodic refresh routine
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				// Ticker cancelled, return
+				return
+			case <-ticker.C:
+				// Ticker fired, refresh the list of other game servers
+				server.RefreshOtherGameServersList()
+			}
+		}
+	}()
 }
 
 type RegisterMessage struct {
@@ -175,11 +232,57 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	if opponent == nil {
 		// TODO: Start forfeit timeout
 		log.Println("Waiting for opponent")
+
+		matchID := pendingGame.match.MatchID
+
+		time.AfterFunc(5*time.Second, func() {
+			game, exists := server.pendingGames[matchID]
+			if exists {
+				log.Println("Failed to find opponent in time. Ending match...")
+				opponentUsername := game.match.BlackPlayer
+				color := "red"
+				if opponentUsername == client.username {
+					opponentUsername = game.match.RedPlayer
+					color = "black"
+				}
+
+				server.HandlePlayerDisconnect(matchID, client, color, opponentUsername)
+
+				return
+			}
+		})
+
 		return
 	}
 	// If the other player has registered start the game
 	log.Printf("Starting game: %s", pendingGame.match.MatchID)
 	server.StartGame(pendingGame)
+}
+
+// client is the client that is still connected
+func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Client, clientColor string, opponentUsername string) {
+	gameResult := GameResult{
+		GameID: matchID,
+		Winner: &client.username,
+		Loser:  &opponentUsername,
+	}
+
+	gameEndMessage := GameEndMessage{
+		Kind:   "game_end",
+		Winner: clientColor,
+	}
+
+	marshalled, err := json.Marshal(gameEndMessage)
+
+	if err != nil {
+		log.Println("Failed to marshal data for game end message to client")
+	}
+	defer (func() {
+		log.Println("Informing client game has ended prematurely.")
+		client.send <- marshalled
+	})()
+
+	server.informMatchmakerGameEnded(gameResult)
 }
 
 func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
@@ -280,67 +383,67 @@ func (server *GameServer) ServerLoop() {
 			log.Println("Attempted unregister")
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
-			_, exists := server.games[gameResult.gameID]
+			_, exists := server.games[gameResult.GameID]
 
 			if exists {
-				matchmakingServers, err := SendServerListRequest(
-					server.nameServerURL + "/matchmakers",
-				)
-				if err != nil {
-					log.Printf("Failed to fetch game servers: %s", err)
-					break
-				}
-				if len(matchmakingServers) == 0 {
-					log.Println("No match making servers available")
-					break
-				}
-				matchmakingServer := matchmakingServers[0]
-				log.Printf(
-					"Selected match making server: %s (ID: %d)",
-					matchmakingServer.URL,
-					matchmakingServer.ID,
-				)
+				server.informMatchmakerGameEnded(gameResult)
 
-				gameResultMessage := GameResultStruct{
-					GameID: gameResult.gameID,
-					Winner: *gameResult.winner,
-					Loser:  *gameResult.loser,
-				}
-				gameResultBytes, err := json.Marshal(gameResultMessage)
-				if err != nil {
-					log.Printf("Failed to marshal result: %s", err)
-					break
-				}
-				res, err := http.Post(
-					matchmakingServer.URL+"/match/updateleaderboard",
-					"application/json",
-					bytes.NewBuffer(gameResultBytes),
-				)
-				if err != nil {
-					log.Printf("Failed to send game results to match making server: %s", err)
-					break
-				}
-				log.Printf("Leaderboard updated!")
-				defer res.Body.Close()
-				endMatchRequest := EndMatchRequest{MatchID: gameResult.gameID}
-				endMatchRequestBytes, err := json.Marshal(endMatchRequest)
-				if err != nil {
-					log.Printf("Failed to marshal end game request: %s", err)
-					return
-				}
-				res, err = http.Post(
-					matchmakingServer.URL+"/match/end",
-					"application/json",
-					bytes.NewBuffer(endMatchRequestBytes),
-				)
-				if err != nil {
-					log.Printf("Failed to send end game %s", err)
-				}
-
-				delete(server.games, gameResult.gameID)
+				delete(server.games, gameResult.GameID)
 			} else {
-				log.Printf("Game %s does not exist\n", gameResult.gameID)
+				log.Printf("Game %s does not exist\n", gameResult.GameID)
 			}
 		}
+	}
+}
+
+func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
+
+	matchmakingServers, err := SendServerListRequest(
+		server.nameServerURL + "/matchmakers",
+	)
+	if err != nil {
+		log.Printf("Failed to fetch game servers: %s", err)
+		return
+	}
+	if len(matchmakingServers) == 0 {
+		log.Println("No match making servers available")
+		return
+	}
+	matchmakingServer := matchmakingServers[0]
+	log.Printf(
+		"Selected match making server: %s (ID: %d)",
+		matchmakingServer.URL,
+		matchmakingServer.ID,
+	)
+
+	gameResultBytes, err := json.Marshal(gameResult)
+	if err != nil {
+		log.Printf("Failed to marshal result: %s", err)
+		return
+	}
+	res, err := http.Post(
+		matchmakingServer.URL+"/match/updateleaderboard",
+		"application/json",
+		bytes.NewBuffer(gameResultBytes),
+	)
+	if err != nil {
+		log.Printf("Failed to send game results to match making server: %s", err)
+		return
+	}
+	log.Printf("Leaderboard updated!")
+	defer res.Body.Close()
+	endMatchRequest := EndMatchRequest{MatchID: gameResult.GameID}
+	endMatchRequestBytes, err := json.Marshal(endMatchRequest)
+	if err != nil {
+		log.Printf("Failed to marshal end game request: %s", err)
+		return
+	}
+	res, err = http.Post(
+		matchmakingServer.URL+"/match/end",
+		"application/json",
+		bytes.NewBuffer(endMatchRequestBytes),
+	)
+	if err != nil {
+		log.Printf("Failed to send end game %s", err)
 	}
 }

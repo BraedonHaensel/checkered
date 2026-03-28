@@ -13,14 +13,16 @@ import {
     hasRemainingPieces,
     hasLegalMoves,
     pieceCount,
+    tileIndexToCoordinate,
 } from '../game-utils'
 import { useSession } from '../api/session'
 import type { GameState, GameStatus } from '../game-state'
 import { PlayerCard } from '../components/PlayerCard'
 import { GameDetails } from '../components/GameDetails'
 import {
-    DashboardButton,
     DrawButton,
+    ForfeitButton,
+    HomeButton,
     SearchButton,
 } from '../components/Buttons'
 
@@ -35,13 +37,13 @@ const DEFAULT_GAME_STATE: GameState = {
 const DEFAULT_GAME_STATUS: GameStatus = { state: 'SEARCHING' }
 
 const Game = ({
-    user,
+    username,
     setPage,
 }: {
-    user: string
+    username: string
     setPage: (page: Page) => void
 }) => {
-    const session = useSession(user)
+    const [session, closeSession, resetSession] = useSession(username)
     const [gameState, setGameState] = useState<GameState>(DEFAULT_GAME_STATE)
     const [gameStatus, setGameStatus] = useReducer<
         GameStatus,
@@ -55,14 +57,14 @@ const Game = ({
             }
             const newState = arg[0]
             if (prev.state != 'SEARCHING' && newState.state === 'SEARCHING') {
-                console.log('Searching...')
+                console.log('Searching for a game...')
                 session.send({ type: 'enqueue' })
             }
             return newState
         },
         [DEFAULT_GAME_STATUS],
         (i) => {
-            console.log('Searching...')
+            console.log('Searching for a game...')
             session.send({ type: 'enqueue' })
             return i[0]
         }
@@ -192,12 +194,15 @@ const Game = ({
     const resetState = () => {
         updateGameState(DEFAULT_GAME_STATE)
         setGameStatus(DEFAULT_GAME_STATUS)
+        // Create a new session
+        resetSession(false)
     }
 
     session.on('start', (message) => {
-        console.log(`Game started: ${message.player_color}`)
+        console.log('New game started:', message)
         setGameStatus({ state: 'IN_GAME' })
         updateGameState({
+            ...DEFAULT_GAME_STATE,
             playerColor: message.player_color,
             isYourTurn: message.player_color === PlayerColor.BLACK,
             opponent: message.opponent,
@@ -205,7 +210,7 @@ const Game = ({
     })
 
     session.on('update_state', (message) => {
-        console.log(`Update State`, message)
+        console.log('Game state update:', message)
         setGameState((oldState: GameState) => ({
             ...oldState,
             draw_requested: false,
@@ -236,23 +241,23 @@ const Game = ({
             draw_requested: false,
             isYourTurn: false,
         }))
+        // Game over, end the session
+        closeSession(false)
     })
 
-    const handlePieceMove = (
-        source_index: number,
-        destination_index: number
-    ) => {
-        console.info(
-            `Moving piece from ${source_index} to ${destination_index}`
-        )
-        // TODO update when we formalize the format of move messages
+    // Performs a piece move from the source to destination tile indices.
+    const handlePieceMove = (sourceIndex: number, destIndex: number) => {
+        const sourceCoord = tileIndexToCoordinate(sourceIndex)
+        const destCoord = tileIndexToCoordinate(destIndex)
+        console.info(`Moving piece from ${sourceCoord} to ${destCoord}`)
+        // Send the move to the server
         session.send({
             type: 'move',
-            source_index,
-            destination_index,
+            source_index: sourceIndex,
+            destination_index: destIndex,
         })
-        // TODO simple implementation, will likely need more logic
-        performPieceMove(source_index, destination_index)
+        // Perform the move locally
+        performPieceMove(sourceIndex, destIndex)
     }
 
     let statusMessage = 'Unknown'
@@ -314,7 +319,7 @@ const Game = ({
                         />
                     </div>
                     <PlayerCard
-                        player={user}
+                        player={username}
                         color={gameState.playerColor}
                         captured={captured}
                         lost={lost}
@@ -333,18 +338,21 @@ const Game = ({
                             : gameState.previousMoves
                     }
                 >
-                    <DashboardButton
-                        onClick={() =>
-                            gameStatus.state === 'IN_GAME'
-                                ? forfeit()
-                                : setPage(Page.HOME)
-                        }
-                        exitsGame={gameStatus.state === 'IN_GAME'}
-                    />
                     {gameStatus.state === 'IN_GAME' && (
-                        <DrawButton
-                            onClick={() => draw()}
-                            requested={gameState.draw_requested}
+                        <>
+                            <ForfeitButton onClick={forfeit} />
+                            <DrawButton
+                                onClick={() => draw()}
+                                requested={gameState.draw_requested}
+                            />
+                        </>
+                    )}
+                    {gameStatus.state !== 'IN_GAME' && (
+                        <HomeButton
+                            onClick={() => {
+                                closeSession(gameStatus.state === 'SEARCHING')
+                                setPage(Page.HOME)
+                            }}
                         />
                     )}
                     {gameStatus.state === 'FINISHED' && (

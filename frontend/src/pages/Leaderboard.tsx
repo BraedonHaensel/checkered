@@ -3,22 +3,30 @@ import type { GetLeaderboardResponse } from '../api/request'
 import { getLeaderboard } from '../api/api'
 import { LeaderboardTable } from '../components/Leaderboard'
 import { Page } from '../enums'
-import { DashboardButton } from '../components/Buttons'
+import { HomeButton } from '../components/Buttons'
 import { GameDetails } from '../components/GameDetails'
 
 const Leaderboard = ({
     setPage,
-    user,
+    username,
 }: {
     setPage: (page: Page) => void
-    user: string
+    username: string
 }) => {
-    const [leaderboard, setLeaderboard] =
-        useState<GetLeaderboardResponse | null>(null)
+    const [leaderboard, setLeaderboard] = useState<
+        GetLeaderboardResponse['board'] | null
+    >(null)
 
     useEffect(() => {
-        getLeaderboard().then((result) => setLeaderboard(result))
-    }, [setLeaderboard])
+        getLeaderboard().then((result) => {
+            const board = result.board
+            if (!board.some((entry) => entry.username === username)) {
+                // Add self to leaderboard
+                board.push({ username, wins: 0, losses: 0 })
+            }
+            setLeaderboard(board)
+        })
+    }, [setLeaderboard, username])
 
     return (
         <div className="grid h-lvh grid-rows-[min-content_1fr] gap-5 p-5">
@@ -36,11 +44,8 @@ const Leaderboard = ({
                         </>
                     )}
                 </div>
-                <GameDetails statusMessage={`Welcome, ${user}`}>
-                    <DashboardButton
-                        onClick={() => setPage(Page.HOME)}
-                        exitsGame={false}
-                    />
+                <GameDetails statusMessage={`Welcome, ${username}`}>
+                    <HomeButton onClick={() => setPage(Page.HOME)} />
                 </GameDetails>
             </div>
         </div>

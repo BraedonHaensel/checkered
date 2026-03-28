@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -9,22 +11,33 @@ import (
 	"strings"
 
 	Checkered "github.com/akeuben/checkered"
+	"github.com/joho/godotenv"
 )
 
 // Setting local addresses including the default nameserver
 var (
-	addr          = flag.String("addr", ":4000", "http service address")
-	nameServerURL = flag.String("ns", "http://localhost:9000", "full Name Server URL")
+	addr          = flag.String("addr", "", "http service address")
+	nameServerURL = flag.String("ns", "", "full Name Server URL")
 )
 
 func main() {
-
 	// Reading command line
 	flag.Parse()
-	url := Checkered.GetFullURL(*addr)
+	godotenv.Load(".env") 
+	godotenv.Load("../.env")
+	godotenv.Load("../../.env")
+	godotenv.Load("../../../.env")
+
+	addr := Checkered.ParseStringOption(*addr, "APP_MATCHMAKER_BIND", ":4000")
+	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
+
+	log.Printf("Using name server located at %s\n", nameServerURL)
+	
+	url := Checkered.GetFullURL(addr)
+	
 
 	// Instantiating a new matchmaker object
-	matchmaker := Checkered.NewMatchmaker(url, *nameServerURL)
+	matchmaker := Checkered.NewMatchmaker(url, nameServerURL)
 
 	// ---------------------------------------------
 
@@ -42,6 +55,10 @@ func main() {
 
 	http.HandleFunc("/queue/leave", func(w http.ResponseWriter, r *http.Request) {
 		matchmaker.LeaveQueueRequest(w, r)
+	})
+
+	http.HandleFunc("POST /match/request-new-game-server", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.RequestNewGameServer(w, r)
 	})
 
 	http.HandleFunc("POST /match/updateleaderboard", func(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +82,18 @@ func main() {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
+	// Replication endpoints
+
+	http.HandleFunc("POST /internal/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetLeaderboard(w, r)
+	})
+	http.HandleFunc("POST /internal/queue", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetQueue(w, r)
+	})
+	http.HandleFunc("POST /internal/matches", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.SetMatches(w, r)
+	})
+
 	// Register with the Name Server
 	log.Println("Matchmaker running on", url)
 	matchmaker.Register(url)
@@ -72,10 +101,7 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	// TODO get list of servers from Name Server before/at the start of the election
-	// And have a server refresh loop
-
-	err := http.ListenAndServe(*addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
+	err := http.ListenAndServe(addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
@@ -95,13 +121,13 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		// destined for this server specifically (for cross-matchmaker communication),
 		// then we handle the request locally.
 		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
-			log.Println("Handling reuqest locally for endpoint:", r.URL.Path)
+			log.Println("Handling request locally for endpoint:", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		newUrl, err := url.Parse(r.URL.Scheme + matchmaker.Leader.URL)
+		newUrl, err := url.Parse(matchmaker.Leader.URL)
 
 		if err != nil {
 			println("Error, could not parse leader url")
@@ -109,12 +135,25 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 
 		proxy := httputil.NewSingleHostReverseProxy(newUrl)
 
+		// Need to deep clone the request so that we do not 
+		// double read if we handle locally.
+		// https://stackoverflow.com/questions/62017146/http-request-clone-is-not-deep-clone
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			// Something went really wrong. We can't clone the data for whatevery reason,
+			// assume we are out of memory and crash 
+			panic("Failed to clone request body")
+		}
+		r2 := r.Clone(r.Context())
+		r2.Body = io.NopCloser(bytes.NewReader(body))
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
 			matchmaker.InitiateElection()
-			// TODO: Resend the request that failed to reach the leader.
+			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
 
-		proxy.ServeHTTP(w, r)
+		proxy.ServeHTTP(w, r2)
 	})
 }

@@ -145,13 +145,18 @@ func (c *Client) readThread() {
 			// log.Printf("Received message (%s)\n", p.Kind)
 			c.handleFoundGame(p)
 		case Forfeit:
-			if c.currentGame != nil {
-				c.currentGame.mu.Lock()
-				c.currentGame.turn = getOpponentColor(c.currentGame, *c)
-				c.currentGame.handleGameEnd()
-				c.currentGame.mu.Unlock()
+			if c.currentGame == nil {
+				return
 			}
+			c.currentGame.mu.Lock()
+			c.currentGame.turn = getOpponentColor(c.currentGame, *c)
+			c.currentGame.handleGameEnd()
+			c.currentGame.mu.Unlock()
 		case Draw:
+			if c.currentGame == nil {
+				return
+			}
+			c.currentGame.mu.Lock()
 			if c.currentGame.blackPlayer.username == c.username && !c.currentGame.blackWantsDraw {
 				c.currentGame.blackWantsDraw = true
 				c.currentGame.redPlayer.send <- message
@@ -164,6 +169,7 @@ func (c *Client) readThread() {
 			if c.currentGame.redWantsDraw && c.currentGame.blackWantsDraw {
 				c.currentGame.handleGameDraw()
 			}
+			c.currentGame.mu.Unlock()
 		}
 	}
 }
@@ -215,6 +221,7 @@ type EnqueueRequest struct {
 	Kind string `json:"type"`
 }
 
+// Handle performing a checkers piece move.
 func (c *Client) handleNewMove(p GameMove) {
 	// TODO: send game move to cluster and wait for acks
 	c.currentGame.mu.Lock()
@@ -237,9 +244,12 @@ func (c *Client) handleNewMove(p GameMove) {
 		log.Printf("Error at Marshalling\n")
 		return
 	}
+
 	if !validMove {
+		// Invalid move, send the original game state to the client
 		c.send <- gameStateBytes
 	} else {
+		// Send the new game state to the other player
 		otherPlayer(c.username, c.currentGame).send <- gameStateBytes
 	}
 }

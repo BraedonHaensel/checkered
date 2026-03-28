@@ -122,6 +122,15 @@ export const tileIndexToCol = (tileIndex: number): number => {
     return col + offset
 }
 
+// Gets the human-readable column letter and row number coordinate for a tile index (ex: A1).
+export const tileIndexToCoordinate = (tileIndex: number): string => {
+    const rowNum = 8 - tileIndexToRow(tileIndex)
+    const colIndex = tileIndexToCol(tileIndex)
+    const colLetter = String.fromCharCode(65 + colIndex)
+
+    return `${colLetter}${rowNum}`
+}
+
 /**
  * Checks if a move direction is upward, otherwise it is downward.
  *
