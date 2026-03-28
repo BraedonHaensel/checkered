@@ -34,16 +34,61 @@ const (
 )
 
 type Game struct {
-	gameID         uuid.UUID
-	redPlayer      *Client
-	blackPlayer    *Client
-	tileStates     []TileState
-	turn           PieceColor
-	previousMoves  []GameMove
-	resultChan     chan GameResult
-	blackWantsDraw bool
-	redWantsDraw   bool
-	mu             sync.Mutex
+	gameID              uuid.UUID
+	gameServer          int
+	redPlayer           *Client
+	blackPlayer         *Client
+	redPlayerUsername   string
+	blackPlayerUsername string
+	tileStates          []TileState
+	turn                PieceColor
+	previousMoves       []GameMove
+	resultChan          chan GameResult
+	blackWantsDraw      bool
+	redWantsDraw        bool
+	mu                  sync.Mutex
+}
+
+type GameSnapshot struct {
+	GameID              string      `json:"gameID"`
+	GameServer          int         `json:"gameServer"`
+	RedPlayerUsername   string      `json:"redPlayerUsername"`
+	BlackPlayerUsername string      `json:"blackPlayerUsername"`
+	TileStates          []TileState `json:"tileStates"`
+	Turn                PieceColor  `json:"turn"`
+	PreviousMoves       []GameMove  `json:"previousMoves"`
+	BlackWantsDraw      bool        `json:"blackWantsDraw"`
+	RedWantsDraw        bool        `json:"redWantsDraw"`
+	Delete              bool        `json:"delete"`
+}
+
+func (game *Game) CreateSnapshot(delete bool) GameSnapshot {
+	return GameSnapshot{
+		GameID:              game.gameID.String(),
+		GameServer:          game.gameServer,
+		RedPlayerUsername:   game.redPlayerUsername,
+		BlackPlayerUsername: game.blackPlayerUsername,
+		TileStates:          game.tileStates,
+		Turn:                game.turn,
+		PreviousMoves:       game.previousMoves,
+		BlackWantsDraw:      game.blackWantsDraw,
+		RedWantsDraw:        game.redWantsDraw,
+		Delete:              delete,
+	}
+}
+
+func (game *Game) ApplySnapshot(snapshot GameSnapshot) {
+	game.mu.Lock()
+	defer game.mu.Unlock()
+	game.gameID = uuid.MustParse(snapshot.GameID)
+	game.gameServer = snapshot.GameServer
+	game.redPlayerUsername = snapshot.RedPlayerUsername
+	game.blackPlayerUsername = snapshot.BlackPlayerUsername
+	game.tileStates = snapshot.TileStates
+	game.turn = snapshot.Turn
+	game.previousMoves = snapshot.PreviousMoves
+	game.blackWantsDraw = snapshot.BlackWantsDraw
+	game.redWantsDraw = snapshot.RedWantsDraw
 }
 
 func generateInitialTileStates() []TileState {
@@ -579,7 +624,7 @@ type GameMove struct {
 type GameResult struct {
 	GameID uuid.UUID `json:"game_id"`
 	// Winner username, or nil if it's a draw
-	Winner *string   `json:"winner,omitempty"`
+	Winner *string `json:"winner,omitempty"`
 	// Loser username, or nil if it's a draw
-	Loser  *string   `json:"loser,omitempty"`
+	Loser *string `json:"loser,omitempty"`
 }

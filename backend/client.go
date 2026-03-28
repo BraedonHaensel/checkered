@@ -28,7 +28,8 @@ type Client struct {
 	register func(*Client)
 	enqueued bool
 
-	unregister chan *Client
+	unregister   chan *Client
+	moveCallback func(*Game)
 }
 
 type ClientMessage struct {
@@ -227,6 +228,7 @@ func (c *Client) handleNewMove(p GameMove) {
 	c.currentGame.mu.Lock()
 	defer c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)
+	c.moveCallback(c.currentGame)
 
 	newState := GameStateUpdate{
 		Kind:          "update_state",
@@ -261,17 +263,18 @@ func otherPlayer(username string, game *Game) *Client {
 	return game.blackPlayer
 }
 
-func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client)) Client {
+func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client), moveCallback func(*Game)) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
-		username:    username,
-		conn:        connection,
-		status:      IDLE,
-		currentGame: nil,
-		send:        make(chan []byte),
-		register:    register,
-		enqueued:    false,
-		unregister:  unregister,
+		username:     username,
+		conn:         connection,
+		status:       IDLE,
+		currentGame:  nil,
+		send:         make(chan []byte),
+		register:     register,
+		enqueued:     false,
+		unregister:   unregister,
+		moveCallback: moveCallback,
 	}
 	return c
 }

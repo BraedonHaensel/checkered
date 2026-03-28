@@ -1,10 +1,7 @@
 package checkered
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 )
 
 type Leaderboard struct {
@@ -52,30 +49,30 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
 	for i := range lb.Board {
 		if lb.Board[i].Username == *result.Winner {
 			lb.Board[i].Wins++
-			log.Printf("New score: %s = w%d/l%d\n", 
-				*result.Winner, 
+			log.Printf("New score: %s = w%d/l%d\n",
+				*result.Winner,
 				lb.Board[i].Wins,
 				lb.Board[i].Losses)
 		}
 		if lb.Board[i].Username == *result.Loser {
 			lb.Board[i].Losses++
-			log.Printf("New score: %s = w%d/l%d\n", 
-				*result.Loser, 
+			log.Printf("New score: %s = w%d/l%d\n",
+				*result.Loser,
 				lb.Board[i].Wins,
 				lb.Board[i].Losses)
 		}
 	}
-	
+
 	return true
 }
 
 // / return a json payload of the current leaderboard
-func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
-	err := json.NewEncoder(w).Encode(s.leaderboard)
-	if err != nil {
-		errorStr := fmt.Errorf("getLeaderboard error: %s", err)
-		fmt.Println(errorStr)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
+// func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
+// 	err := json.NewEncoder(w).Encode(s.leaderboard)
+// 	if err != nil {
+// 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)
+// 		fmt.Println(errorStr)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
+// }

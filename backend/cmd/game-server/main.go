@@ -18,7 +18,7 @@ var (
 func main() {
 	// Reading command line
 	flag.Parse()
-	godotenv.Load(".env") 
+	godotenv.Load(".env")
 	godotenv.Load("../.env")
 	godotenv.Load("../../.env")
 	godotenv.Load("../../../.env")
@@ -27,7 +27,7 @@ func main() {
 	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
 
 	log.Printf("Using name server located at %s\n", nameServerURL)
-	
+
 	url := Checkered.GetFullURL(addr)
 
 	// Create the server object
@@ -39,12 +39,18 @@ func main() {
 		Checkered.ServeWs(server, w, r)
 	})
 	http.HandleFunc("POST /newGame", server.CreateGame)
+	http.HandleFunc("POST /internal", server.HandleGameStateUpdate)
 
 	// Endpoint to check the health of the Game Server
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		// Note: Uncomment the below "select {}" line to simulate an unresponsive Game Server
 		// select {}
 		w.WriteHeader(http.StatusOK)
+	})
+	http.HandleFunc("/{path}", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Unexpected request %s %s", r.Method, r.URL)
+		w.WriteHeader(404)
+		w.Write([]byte("404 - Not Found"))
 	})
 
 	// Register with the Name Server
