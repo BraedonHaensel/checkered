@@ -295,7 +295,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 
 	// If the other player hasn't registered start a timeout
 	if opponent == nil {
-		// TODO: Start forfeit timeout
+		//Start forfeit timeout
 		log.Println("Waiting for opponent")
 
 		matchID := pendingGame.gameID
