@@ -23,7 +23,7 @@ var (
 func main() {
 	// Reading command line
 	flag.Parse()
-	godotenv.Load(".env") 
+	godotenv.Load(".env")
 	godotenv.Load("../.env")
 	godotenv.Load("../../.env")
 	godotenv.Load("../../../.env")
@@ -32,9 +32,8 @@ func main() {
 	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
 
 	log.Printf("Using name server located at %s\n", nameServerURL)
-	
+
 	url := Checkered.GetFullURL(addr)
-	
 
 	// Instantiating a new matchmaker object
 	matchmaker := Checkered.NewMatchmaker(url, nameServerURL)
@@ -94,8 +93,8 @@ func main() {
 		matchmaker.SetMatches(w, r)
 	})
 
-	http.HandleFunc("GET /internal/request-data", func(w http.ResponseWriter, r *http.Request) {
-		matchmaker.PackageData(w, r)
+	http.HandleFunc("POST /internal/new-leader-data-sync", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.HandleNewLeaderDataSyncRequest(w, r)
 	})
 
 	// Register with the Name Server
@@ -103,21 +102,25 @@ func main() {
 	matchmaker.Register(url)
 
 	// Start a leader election
-	matchmaker.InitiateElection()
+	go matchmaker.InitiateElection()
 
-	// Request most recent data 
-	if matchmaker.Leader.ID == matchmaker.ID {
-		// We have become the new leader. We need to request the data from some other server.
-		// Since requests are not closed until everything has been synchronized, we can pull 
-		// from any of the other servers, if one exists.
-		other, err := matchmaker.ChooseRandomOtherServer()
-		if err == nil {
-			matchmaker.RequestUpdatedData(*other)
-		}
-	} else {
-		// There is another authorative leader. We send the message to them explicitly
-		matchmaker.RequestUpdatedData(matchmaker.Leader)
-	}
+	// TODO move the below to a separate place within the election protocol
+
+	// TODO Update syncVersion as needed when receiving data syncs or performing any operations
+
+	// // Request most recent data
+	// if matchmaker.Leader.ID == matchmaker.ID {
+	// 	// We have become the new leader. We need to request the data from some other server.
+	// 	// Since requests are not closed until everything has been synchronized, we can pull
+	// 	// from any of the other servers, if one exists.
+	// 	other, err := matchmaker.ChooseRandomOtherServer()
+	// 	if err == nil {
+	// 		matchmaker.SendNewLeaderDataSyncRequest(*other)
+	// 	}
+	// } else {
+	// 	// There is another authorative leader. We send the message to them explicitly
+	// 	matchmaker.SendNewLeaderDataSyncRequest(matchmaker.Leader)
+	// }
 
 	err := http.ListenAndServe(addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
@@ -133,6 +136,13 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.WriteHeader(http.StatusOK)
 			return
+		}
+
+		if !strings.Contains(r.URL.Path, "internal") {
+			// Client request, wait until it is safe to continue after election or synchronization ends
+			matchmaker.AcceptingClientRequestsMu.RLock()
+			// Hold the read lock until done processing the request
+			defer matchmaker.AcceptingClientRequestsMu.RUnlock()
 		}
 
 		// If this is the leader server, or an internal route, that is, a route that is
@@ -153,13 +163,13 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 
 		proxy := httputil.NewSingleHostReverseProxy(newUrl)
 
-		// Need to deep clone the request so that we do not 
+		// Need to deep clone the request so that we do not
 		// double read if we handle locally.
 		// https://stackoverflow.com/questions/62017146/http-request-clone-is-not-deep-clone
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			// Something went really wrong. We can't clone the data for whatevery reason,
-			// assume we are out of memory and crash 
+			// assume we are out of memory and crash
 			panic("Failed to clone request body")
 		}
 		r2 := r.Clone(r.Context())
