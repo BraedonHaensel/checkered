@@ -4,14 +4,24 @@ Test script for managing multiple processes
 
 #pylint: disable=missing-function-docstring, missing-class-docstring
 
+import logging
 import os
 import subprocess as sp
 import signal
+import sys
 import threading
 from typing import Callable
-import time
 
 from dotenv import load_dotenv
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    force=True,
+    handlers=[
+        logging.FileHandler('run.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 load_dotenv()
 NAMESERVER_ADDRESS = os.getenv("APP_NAMESERVER_URL", "http://localhost:7000")
@@ -24,8 +34,8 @@ HELP_MESSAGE = (
     '\t Display this message\n'
     '- quit:\n'
     '\t Shutdown all servers and exit\n'
-    '- start <"matchmaker" | "gameserver">:\n'
-    '\t Spawn a new matchmaker or gameserver\n'
+    '- start <"matchmaker" | "gameserver">+:\n'
+    '\t Spawn new matchmaker(s) or gameserver(s)\n'
     '- stop <"matchmaker" | "gameserver"> <id>:\n'
     '\t Stop the matchmaker or gameserver with the specified id\n'
     '- kill <"matchmaker" | "gameserver"> <id>:\n'
@@ -55,10 +65,10 @@ class CheckeredProcess:
 
     def _read_thread(self) -> None:
         for line in self.proc.stdout:
-            print(f'[{self.pid}] {line.rstrip()}')
+            logging.info(f'[{self.pid}] {line.rstrip()}')
         if self.proc.poll() is None:
             self.proc.wait()
-        print(f'[{self.pid}] Terminated')
+        logging.debug(f'[{self.pid}] Terminated')
         if self.callback is not None:
             self.callback()
 
@@ -156,104 +166,95 @@ def main() -> None:
             if cmd.lower() == 'quit':
                 break
             elif cmd.lower() == 'help':
-                print(HELP_MESSAGE)
+                logging.info(HELP_MESSAGE)
             elif cmd.lower() == 'list':
                 if len(args) != 1:
-                    print(f'Improper usage: expected 1 argument found {len(args)}')
+                    logging.error(f'Improper usage: expected 1 argument found {len(args)}')
                     continue
                 server_type = args[0]
                 if server_type.lower() == 'matchmaker':
-                    print('Matchmakers:')
+                    logging.info('Matchmakers:')
                     for matchmaker in matchmakers:
-                        print(f'\t- {matchmaker}')
+                        logging.info(f'\t- {matchmaker}')
                 elif server_type.lower() == 'gameserver':
-                    print('Game Servers:')
+                    logging.info('Game Servers:')
                     for game_server in game_servers:
-                        print(f'\t- {game_server}')
+                        logging.info(f'\t- {game_server}')
                 else:
-                    print(
+                    logging.info(
                         f'Unexpected server type "{server_type}": '
                         'expected "matchmaker" or "gameserver"'
                     )
             elif cmd.lower() == 'stop':
-                if len(args) != 2:
-                    print(f'Improper usage: expected 2 arguments found {len(args)}')
+                if len(args) != 1:
+                    logging.error(f'Improper usage: expected 1 argument found {len(args)}')
                     continue
-                server_type, pid = args
-                if server_type.lower() == 'matchmaker':
-                    if pid not in matchmakers:
-                        print(f'Matchmaker "{pid}" not found')
-                        continue
-                    print(f'Stopping matchmaker "{pid}"')
+                pid = args[0]
+                if pid in matchmakers:
+                    logging.info(f'Stopping matchmaker "{pid}"')
                     matchmakers[pid].stop()
-                    print(f'Matchmaker "{pid}" stopped')
-                elif server_type.lower() == 'gameserver':
-                    if pid not in game_servers:
-                        print(f'Game Server "{pid}" not found')
-                        continue
-                    print(f'Stopping game server "{pid}"')
+                    logging.info(f'Matchmaker "{pid}" stopped')
+                elif pid in game_servers:
+                    logging.info(f'Stopping game server "{pid}"')
                     game_servers[pid].stop()
-                    print(f'Game server "{pid}" stopped')
+                    logging.info(f'Game server "{pid}" stopped')
                 else:
-                    print(
+                    logging.error(
                         f'Unexpected server type "{server_type}": '
                         'expected "matchmaker" or "gameserver"'
                     )
             elif cmd.lower() == 'kill':
-                if len(args) != 2:
-                    print(f'Improper usage: expected 2 arguments found {len(args)}')
-                server_type, pid = args
-                if server_type.lower() == 'matchmaker':
-                    if pid not in matchmakers:
-                        print(f'Matchmaker "{pid}" not found')
-                        continue
-                    print(f'Killing matchmaker "{pid}"')
+                if len(args) != 1:
+                    logging.error(f'Improper usage: expected 1 argument found {len(args)}')
+                    continue
+                pid = args[0]
+                if pid in matchmakers:
+                    logging.info(f'Killing matchmaker "{pid}"')
                     matchmakers[pid].kill()
-                    print(f'Matchmaker "{pid}" killed')
-                elif server_type.lower() == 'gameserver':
-                    if pid not in game_servers:
-                        print(f'Game Server "{pid}" not found')
-                        continue
-                    print(f'Killing game server "{pid}"')
+                    logging.info(f'Matchmaker "{pid}" killed')
+                elif pid in game_servers:
+                    logging.info(f'Killing game server "{pid}"')
                     game_servers[pid].kill()
-                    print(f'Game server "{pid}" killed')
+                    logging.info(f'Game server "{pid}" killed')
                 else:
-                    print(
+                    logging.error(
                         f'Unexpected server type "{server_type}": '
                         'expected "matchmaker" or "gameserver"'
                     )
             elif cmd.lower() == 'start':
-                if len(args) != 1:
-                    print(f'Improper usage: expected 1 argument found {len(args)}')
-                server_type = args[0]
-                if server_type.lower() == 'matchmaker':
-                    pid = f'MM{matchmaker_id:02}'
-                    port = BASE_MATCHMAKER_PORT + matchmaker_id
-                    matchmaker = CheckeredProcess(
-                        pid=pid,
-                        cmd=['go', 'run', 'cmd/matchmaker/main.go', f'--addr=localhost:{port}'],
-                        cwd='backend',
-                        callback = lambda: matchmakers.pop(pid, None)
-                    )
-                    matchmaker_id += 1
-                    matchmakers[pid] = matchmaker
-                    matchmaker.start()
-                    print(f'Created matchmaker with pid: "{pid}"')
-                elif server_type.lower() == 'gameserver':
-                    pid = f'GS{game_server_id:02}'
-                    port = BASE_GAMESERVER_PORT + game_server_id
-                    game_server = CheckeredProcess(
-                        pid=pid,
-                        cmd=['go', 'run', 'cmd/game-server/main.go', f'--addr=localhost:{port}'],
-                        cwd='backend',
-                        callback = lambda: game_servers.pop(pid, None)
-                    )
-                    game_server_id += 1
-                    game_servers[pid] = game_server
-                    game_server.start()
-                    print(f'Created gameserver with pid: "{pid}"')
+                if len(args) < 1:
+                    logging.error(f'Improper usage: expected 1 or more arguments found {len(args)}')
+                for server_type in args:
+                    if server_type.lower() == 'matchmaker':
+                        pid = f'MM{matchmaker_id:02}'
+                        port = BASE_MATCHMAKER_PORT + matchmaker_id
+                        matchmaker = CheckeredProcess(
+                            pid=pid,
+                            cmd=['go', 'run', 'cmd/matchmaker/main.go', f'--addr=localhost:{port}'],
+                            cwd='backend',
+                            callback = lambda: matchmakers.pop(pid, None)
+                        )
+                        matchmaker_id += 1
+                        matchmakers[pid] = matchmaker
+                        matchmaker.start()
+                        logging.info(f'Created matchmaker with pid: "{pid}"')
+                    elif server_type.lower() == 'gameserver':
+                        pid = f'GS{game_server_id:02}'
+                        port = BASE_GAMESERVER_PORT + game_server_id
+                        game_server = CheckeredProcess(
+                            pid=pid,
+                            cmd=['go', 'run', 'cmd/game-server/main.go', f'--addr=localhost:{port}'],
+                            cwd='backend',
+                            callback = lambda: game_servers.pop(pid, None)
+                        )
+                        game_server_id += 1
+                        game_servers[pid] = game_server
+                        game_server.start()
+                        logging.info(f'Created gameserver with pid: "{pid}"')
+                    else:
+                        logging.error(f'Unexpected server type "{server_type}"')
             else:
-                print(f'Unrecognized command "{cmd}"')
+                logging.error(f'Unrecognized command "{cmd}"')
     finally:
         if name_server is not None:
             name_server.stop()

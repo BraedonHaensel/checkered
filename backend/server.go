@@ -60,7 +60,7 @@ func InitServer(nameServerURL string) *GameServer {
 }
 
 type TakeOverRequest struct {
-	gameID uuid.UUID
+	GameID uuid.UUID
 }
 
 func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
@@ -69,9 +69,10 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to parse takeover request %s (%d)", err, status)
 		return
 	}
+	log.Printf("Taking over game: %s", req.GameID)
 	server.gamesLock.Lock()
 	defer server.gamesLock.Unlock()
-	game, exists := server.games[req.gameID]
+	game, exists := server.games[req.GameID]
 	if !exists {
 		w.WriteHeader(404)
 		w.Write([]byte("Game not found"))
@@ -79,6 +80,7 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 	}
 	game.gameServer = server.ID
 	server.broadcastGameState(game.CreateSnapshot(false))
+	w.WriteHeader(200)
 }
 
 func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +98,10 @@ func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.R
 	gameId := uuid.MustParse(gameSnapshot.GameID)
 	game, exists := server.games[gameId]
 	if !exists {
-		gameRoom := Game{}
+		gameRoom := Game{
+			resultChan: server.gameResults,
+			mu:         sync.Mutex{},
+		}
 		game = &gameRoom
 		server.games[gameId] = game
 		log.Printf("Created game %s", gameId)
@@ -333,8 +338,9 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Client, clientColor string, opponentUsername string) {
 	gameResult := GameResult{
 		GameID: matchID,
-		Winner: &client.username,
-		Loser:  &opponentUsername,
+		Winner: client.username,
+		Loser:  opponentUsername,
+		IsDraw: false,
 	}
 
 	gameEndMessage := GameEndMessage{
@@ -419,6 +425,24 @@ func (server *GameServer) StartGame(gameID uuid.UUID) {
 	// send the message that they have found a game to both players
 	server.clients[game.blackPlayer.username].send <- blackBytes
 	server.clients[game.redPlayer.username].send <- redBytes
+
+	initialState := GameStateUpdate{
+		Kind:          "update_state",
+		TileStates:    game.tileStates,
+		Turn:          "red",
+		PreviousMoves: game.previousMoves,
+	}
+
+	if game.turn == Black {
+		initialState.Turn = "black"
+	}
+	initialStateBytes, err := json.Marshal(initialState)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	server.clients[game.blackPlayer.username].send <- initialStateBytes
+	server.clients[game.redPlayer.username].send <- initialStateBytes
 }
 
 // main idea of this loop is to register new active users and put them
@@ -432,6 +456,10 @@ func (server *GameServer) ServerLoop() {
 			log.Println("Attempted unregister")
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
+			log.Printf(
+				"Handling game result (game=%s)",
+				gameResult.GameID,
+			)
 			server.gamesLock.Lock()
 			game, exists := server.games[gameResult.GameID]
 

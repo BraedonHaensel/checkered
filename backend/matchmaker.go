@@ -732,47 +732,55 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	// TODO this is just a temporary fix of choosing the first server
 	log.Println("Finding a replacement Game Server for match", match.MatchID)
 
-	// Get all available game servers
-	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// Locate a new gameserver
+	var gameServer *Server = nil
+	for {
+		// Get all available game servers
+		gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if len(gameServers) == 0 {
+			log.Println("No game servers available")
+			http.Error(w, "No game servers available", http.StatusInternalServerError)
+			return
+		}
+
+		// Pick the first one
+		gameServer = &gameServers[0]
+
+		// Switch the match to the new Game Server
+		match.GameServer = *gameServer
+
+		// Marshal the match to JSON
+		matchBytes, err := json.Marshal(TakeOverRequest{
+			GameID: match.MatchID,
+		})
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
+			log.Println(errMsg)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+
+		// Send a POST request to the game server with the match details
+		res, err := http.Post(match.GameServer.URL+"/takeover", "application/json", bytes.NewBuffer(matchBytes))
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+			log.Println(errMsg)
+			m.DeregisterGameServer(match.GameServer.ID)
+			continue
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			continue
+		}
+		// Broadcast the match change to the backup Matchmakers
+		m.broadcastMatchesChanged()
+		break
 	}
-
-	if len(gameServers) == 0 {
-		log.Println("No game servers available")
-		http.Error(w, "No game servers available", http.StatusInternalServerError)
-		return
-	}
-
-	// Pick the first one
-	gameServer := gameServers[0]
-
-	// Switch the match to the new Game Server
-	match.GameServer = gameServer
-
-	// Broadcast the match change to the backup Matchmakers
-	m.broadcastMatchesChanged()
-
-	// Marshal the match to JSON
-	matchBytes, err := json.Marshal(match)
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
-		log.Println(errMsg)
-		http.Error(w, errMsg, http.StatusInternalServerError)
-		return
-	}
-
-	// Send a POST request to the game server with the match details
-	res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
-		log.Println(errMsg)
-		http.Error(w, errMsg, http.StatusInternalServerError)
-		return
-	}
-	defer res.Body.Close()
-
 	log.Printf("Match %s moved to Game Server [%d] %s", match.MatchID, gameServer.ID, gameServer.URL)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -791,14 +799,12 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the leaderboard
+	log.Printf("Updating leaderboard (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
 	m.mu_leaderboard.Lock()
-	isNotADraw := m.leaderboard.UpdateLeaderboard(data)
+	m.leaderboard.UpdateLeaderboard(data)
 	m.mu_leaderboard.Unlock()
 
-	if isNotADraw {
-		// Broadcast the new leaderboard if the game did not end in a draw
-		m.broadcastLeaderboardChanged()
-	}
+	m.broadcastLeaderboardChanged()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

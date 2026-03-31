@@ -573,8 +573,9 @@ func (game *Game) handleGameEnd() {
 	// tell the server the result to update the leaderboard
 	gameResult := GameResult{
 		GameID: game.gameID,
-		Winner: &winnerUsername,
-		Loser:  &loserUsername,
+		Winner: winnerUsername,
+		Loser:  loserUsername,
+		IsDraw: false,
 	}
 
 	// Send the game result to the Matchmaker
@@ -598,8 +599,9 @@ func (game *Game) handleGameDraw() {
 	// tell the server the result to update the leaderboard
 	gameResult := GameResult{
 		GameID: game.gameID,
-		Winner: nil, // nil winner indicates a draw
-		Loser:  nil,
+		Winner: game.blackPlayerUsername,
+		Loser:  game.redPlayerUsername,
+		IsDraw: true,
 	}
 
 	// Send the game result to the Matchmaker
@@ -624,7 +626,8 @@ type GameMove struct {
 type GameResult struct {
 	GameID uuid.UUID `json:"game_id"`
 	// Winner username, or nil if it's a draw
-	Winner *string `json:"winner,omitempty"`
+	Winner string `json:"winner,omitempty"`
 	// Loser username, or nil if it's a draw
-	Loser *string `json:"loser,omitempty"`
+	Loser  string `json:"loser,omitempty"`
+	IsDraw bool   `json:"is_draw"`
 }
