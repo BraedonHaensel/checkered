@@ -1,3 +1,7 @@
+# Frontend Development
+
+This document describes the recommended setup for frontend development in [Visual Studio Code](https://code.visualstudio.com/).
+
 ## Recommended Extensions
 
 ESLint

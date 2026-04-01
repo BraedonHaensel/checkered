@@ -2,9 +2,7 @@ import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
 import {
     isJumpMove,
-    tileIndexToCol,
     tileIndexToCoordinate,
-    tileIndexToRow,
 } from '../game-utils'
 import type { ReactNode } from 'react'
 
