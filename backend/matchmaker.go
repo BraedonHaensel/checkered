@@ -754,10 +754,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		defer res.Body.Close()
 
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
-	} else {
-		m.IncrementSyncVersion()
 	}
 
+	m.IncrementSyncVersion()
 	m.broadcastQueueUpdate()
 
 	// Let the user know they're in queue
@@ -1079,7 +1078,7 @@ func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.matchesMu.Lock()
-	fmt.Println("Matches update received")
+	log.Println("Matches update received")
 	m.matches = data
 	m.IncrementSyncVersion()
 	m.matchesMu.Unlock()

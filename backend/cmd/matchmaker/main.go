@@ -122,18 +122,21 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			return
 		}
 
-		if !strings.Contains(r.URL.Path, "internal") {
-			// Client request, wait until it is safe to continue after election or synchronization ends
-			matchmaker.AcceptingClientRequestsMu.RLock()
-			// Hold the read lock until done processing the request
-			defer matchmaker.AcceptingClientRequestsMu.RUnlock()
-		}
+		isInternal := strings.Contains(r.URL.Path, "internal")
 
 		// If this is the leader server, or an internal route, that is, a route that is
-		// destined for this server specifically (for cross-matchmaker communication),
+		// destined for this server specifically (for cross-Matchmaker communication),
 		// then we handle the request locally.
-		if strings.Contains(r.URL.Path, "internal") || matchmaker.IsLeader() {
+		if isInternal || matchmaker.IsLeader() {
 			log.Println("Handling request locally for endpoint:", r.URL.Path)
+
+			if !isInternal {
+				// Client request, wait until it is safe to proceed
+				matchmaker.AcceptingClientRequestsMu.RLock()
+				defer matchmaker.AcceptingClientRequestsMu.RUnlock()
+			}
+
+			// Handle the internal or client request
 			next.ServeHTTP(w, r)
 			return
 		}
