@@ -93,6 +93,12 @@ func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 	log.Printf("Received snapshot for game %s", gameSnapshot.GameID)
+	server.applyUpdate(gameSnapshot)
+	w.WriteHeader(202)
+}
+
+func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
+
 	server.gamesLock.Lock()
 	defer server.gamesLock.Unlock()
 	gameId := uuid.MustParse(gameSnapshot.GameID)
@@ -113,7 +119,26 @@ func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.R
 		game.ApplySnapshot(gameSnapshot)
 		log.Printf("Updated game %s", gameId)
 	}
-	w.WriteHeader(202)
+}
+
+type GameSnapshots struct {
+	Snapshots []GameSnapshot
+}
+
+func (server *GameServer) GetOwnedSnapshots(w http.ResponseWriter, r *http.Request) {
+	ownedGames := make([]GameSnapshot, 0)
+	for _, game := range server.games {
+		if game.gameServer == server.ID {
+			ownedGames = append(ownedGames, game.CreateSnapshot(false))
+		}
+	}
+	ownedGamesBytes, err := json.Marshal(GameSnapshots{Snapshots: ownedGames})
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Write(ownedGamesBytes)
 }
 
 func (server *GameServer) broadcastGameState(message GameSnapshot) error {
@@ -156,6 +181,24 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
+	// Get current snapshots
+	server.RefreshOtherGameServersList()
+	for i := range server.otherGameServers {
+		otherServer := server.otherGameServers[i]
+		res, err := http.Get(otherServer.URL + "/snapshots")
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		snapshots, err := ParseJsonResponseData[GameSnapshots](res)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for j := range snapshots.Snapshots {
+			server.applyUpdate(snapshots.Snapshots[j])
+		}
+	}
 }
 
 // Refreshes and sets the list of known other Game Servers.
