@@ -8,11 +8,11 @@ Use:
   - `Dequeue` to remove elements from the queue
 */
 type Queue[T any] struct {
-	MaxSize int 	`json:"max_size"` // The maximum capacity of the queue
-	Size    int 	`json:"size"`		// The current size of the queue (i.e. the number of elements in the queue)
-	Head    int 	`json:"head"` 	// The pointer to the head of the queue
-	Tail    int 	`json:"tail"` 	// The pointer to the tail of the queue
-	Arr     []T 	`json:"data"` 	// The underlying container of the queue
+	MaxSize int `json:"max_size"` // The maximum capacity of the queue
+	Size    int `json:"size"`     // The current size of the queue (i.e. the number of elements in the queue)
+	Head    int `json:"head"`     // The pointer to the head of the queue
+	Tail    int `json:"tail"`     // The pointer to the tail of the queue
+	Arr     []T `json:"data"`     // The underlying container of the queue
 }
 
 /*

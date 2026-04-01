@@ -579,7 +579,7 @@ type GameMove struct {
 type GameResult struct {
 	GameID uuid.UUID `json:"game_id"`
 	// Winner username, or nil if it's a draw
-	Winner *string   `json:"winner,omitempty"`
+	Winner *string `json:"winner,omitempty"`
 	// Loser username, or nil if it's a draw
-	Loser  *string   `json:"loser,omitempty"`
+	Loser *string `json:"loser,omitempty"`
 }
