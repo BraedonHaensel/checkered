@@ -124,17 +124,17 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 
 		isInternal := strings.Contains(r.URL.Path, "internal")
 
+		if !isInternal {
+			// Client request, wait until it is safe to proceed
+			matchmaker.AcceptingClientRequestsMu.RLock()
+			defer matchmaker.AcceptingClientRequestsMu.RUnlock()
+		}
+
 		// If this is the leader server, or an internal route, that is, a route that is
 		// destined for this server specifically (for cross-Matchmaker communication),
 		// then we handle the request locally.
 		if isInternal || matchmaker.IsLeader() {
 			log.Println("Handling request locally for endpoint:", r.URL.Path)
-
-			if !isInternal {
-				// Client request, wait until it is safe to proceed
-				matchmaker.AcceptingClientRequestsMu.RLock()
-				defer matchmaker.AcceptingClientRequestsMu.RUnlock()
-			}
 
 			// Handle the internal or client request
 			next.ServeHTTP(w, r)
@@ -165,6 +165,8 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
+			matchmaker.AcceptingClientRequestsMu.TryRLock()
+			matchmaker.AcceptingClientRequestsMu.RUnlock()
 			matchmaker.InitiateElection()
 			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
