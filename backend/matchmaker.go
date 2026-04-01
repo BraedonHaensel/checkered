@@ -3,6 +3,7 @@ package checkered
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -50,6 +51,64 @@ type Matchmaker struct {
 	// Timer and chan to wait for and detect receiving a leader(i) response
 	leaderTimer     *time.Timer
 	leaderTimerChan chan struct{}
+}
+
+type AllDataResponse struct {
+	Leaderboard 	Leaderboard 			`json:"leaderboard"`
+	Queue 			Queue[string]			`json:"queue"`
+	Matches 		map[uuid.UUID]*Match	`json:"matches"`
+}
+
+func (m *Matchmaker) ChooseRandomOtherServer() (*Server, error) {
+	m.otherMatchmakersMu.Lock()
+	defer m.otherMatchmakersMu.Unlock()
+
+	// If there are no other matchmakers, then there is no way so recover from a failed server.
+	if len(m.otherMatchmakers) == 0 {
+		return nil, errors.New("No other servers")
+	}
+
+	// Otherwise, choose a different server and request the up to date information from them.
+	return &m.otherMatchmakers[0], nil
+}
+
+func (m *Matchmaker) RequestUpdatedData(other Server) {
+
+	res, err := http.Get(other.URL + "/internal/request-data")
+	if err != nil {
+		// TODO: Handle failure 
+		panic("Failed to request data from other server!")
+	}
+	defer res.Body.Close()
+
+	response, err := ParseJsonResponseData[AllDataResponse](res)
+	if err != nil {
+		// TODO: Handle failure 
+		panic("Failed to decode response for /internal/requestData")
+	}
+
+	m.leaderboard = &response.Leaderboard
+	m.queue = response.Queue
+	m.matches = response.Matches
+}
+
+func (m *Matchmaker) PackageData(w http.ResponseWriter, r *http.Request) {
+	m.mu_leaderboard.Lock()
+	m.mu_queue.Lock()
+	m.mu_matches.Lock()
+	data := AllDataResponse{
+		Leaderboard: *m.leaderboard,
+		Queue: m.queue,
+		Matches: m.matches,
+	}
+	m.mu_matches.Unlock()
+	m.mu_queue.Unlock()
+	m.mu_leaderboard.Unlock()
+
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		panic("Failed to encode json data for package request")
+	}
 }
 
 func NewMatchmaker(url, nameServerURL string) *Matchmaker {
