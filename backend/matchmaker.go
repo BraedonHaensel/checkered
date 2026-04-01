@@ -362,6 +362,9 @@ func (m *Matchmaker) SynchronizeDataAndSendLeaderMessages() {
 
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
+	// Pause client requests during the election
+	m.PauseClientRequests()
+
 	m.runningInElectionMu.Lock()
 	log.Println("Initiating a leader election")
 	m.runningInElection = true
@@ -531,6 +534,9 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 	m.otherMatchmakersMu.Unlock()
 
 	if id < m.ID {
+		// Pause client requests during the election
+		m.PauseClientRequests()
+
 		// Message received from a server with a lower ID, so bully them.
 		log.Printf("Received election(%d). Bullying as this Matchmaker's ID [%d] is higher", id, m.ID)
 		m.sendBullyMessage(otherMatchmaker)
