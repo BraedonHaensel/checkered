@@ -15,7 +15,8 @@ import (
 
 // -------------------- INITIAL ADMIN SET UP	 --------------------
 
-const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
+const LEADER_ELECTION_TIMEOUT_SEC = 10 * time.Second
+const LEADER_ELECTION_BULLY_TIMEOUT_SEC = 3 * time.Second
 
 // Responsible for handling the queue for new players finding a game, as well as
 // maintaining the leaderboard and handling all leaderboard requests
@@ -393,7 +394,7 @@ func (m *Matchmaker) InitiateElection() {
 	}
 
 	// Start the bully response timeout before sending the election(i) messages to avoid race conditions
-	m.bullyTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	m.bullyTimer = time.NewTimer(LEADER_ELECTION_BULLY_TIMEOUT_SEC)
 	// The chan is used to interrupt waiting for the timer when a bully() is received
 	m.bullyTimerChan = make(chan struct{})
 
@@ -413,7 +414,7 @@ func (m *Matchmaker) InitiateElection() {
 
 	// Wait for a bully() response
 	log.Printf("Waiting up to %dms for a bully() response\n",
-		LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
+		LEADER_ELECTION_BULLY_TIMEOUT_SEC.Milliseconds())
 
 	select {
 	case <-m.bullyTimer.C:
