@@ -3,3 +3,5 @@
 .vite/
 
 .env
+venv/
+*.log

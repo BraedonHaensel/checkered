@@ -39,12 +39,20 @@ func main() {
 		Checkered.ServeWs(server, w, r)
 	})
 	http.HandleFunc("POST /newGame", server.CreateGame)
+	http.HandleFunc("POST /internal", server.HandleGameStateUpdate)
+	http.HandleFunc("POST /takeover", server.TakeOverGame)
+	http.HandleFunc("GET /snapshots", server.GetOwnedSnapshots)
 
 	// Endpoint to check the health of the Game Server
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		// Note: Uncomment the below "select {}" line to simulate an unresponsive Game Server
 		// select {}
 		w.WriteHeader(http.StatusOK)
+	})
+	http.HandleFunc("/{path}", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Unexpected request %s %s", r.Method, r.URL)
+		w.WriteHeader(404)
+		w.Write([]byte("404 - Not Found"))
 	})
 
 	// Register with the Name Server

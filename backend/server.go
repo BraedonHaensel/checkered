@@ -24,22 +24,14 @@ const (
 	REFRESH_OTHER_GAME_SERVERS_INTERVAL = 20 * time.Second
 )
 
-type PendingGame struct {
-	match       Match
-	blackClient *Client
-	redClient   *Client
-	mu          sync.Mutex
-}
-
 type GameServer struct {
 	ID int
 	// we map username to client
 	clients map[string]*Client
 	// games that new clients are in
-	games          map[uuid.UUID]*Game
-	readyQueue     Queue[*Client]
-	leaderboard    *Leaderboard
-	Mu_leaderboard sync.Mutex
+	games      map[uuid.UUID]*Game
+	gamesLock  sync.Mutex
+	readyQueue Queue[*Client]
 
 	register     chan *Client
 	unregister   chan *Client
@@ -52,24 +44,132 @@ type GameServer struct {
 	// Other Game Servers in the network (does not include itself)
 	otherGameServers   []Server
 	otherGameServersMu sync.Mutex
-
-	pendingGames map[uuid.UUID]*PendingGame
 }
 
 func InitServer(nameServerURL string) *GameServer {
 	server := GameServer{
-		clients:        make(map[string]*Client),
-		games:          make(map[uuid.UUID]*Game),
-		register:       make(chan *Client),
-		unregister:     make(chan *Client),
-		leaderboard:    &Leaderboard{},
-		Mu_leaderboard: sync.Mutex{},
-		gameResults:    make(chan GameResult, 10),
-		nameServerURL:  nameServerURL,
-		pendingGames:   make(map[uuid.UUID]*PendingGame),
+		clients:       make(map[string]*Client),
+		games:         make(map[uuid.UUID]*Game),
+		register:      make(chan *Client),
+		unregister:    make(chan *Client),
+		gameResults:   make(chan GameResult, 10),
+		nameServerURL: nameServerURL,
 	}
 	InitQueue(&server.readyQueue, QUEUE_SIZE)
 	return &server
+}
+
+type TakeOverRequest struct {
+	GameID uuid.UUID
+}
+
+func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
+	req, err, status := parseJsonRequestData[TakeOverRequest](r)
+	if err != nil {
+		log.Printf("Failed to parse takeover request %s (%d)", err, status)
+		return
+	}
+	log.Printf("Taking over game: %s", req.GameID)
+	server.gamesLock.Lock()
+	defer server.gamesLock.Unlock()
+	game, exists := server.games[req.GameID]
+	if !exists {
+		w.WriteHeader(404)
+		w.Write([]byte("Game not found"))
+		return
+	}
+	game.gameServer = server.ID
+	server.broadcastGameState(game.CreateSnapshot(false))
+	w.WriteHeader(200)
+}
+
+func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received broadcast")
+	gameSnapshot, err, _ := parseJsonRequestData[GameSnapshot](r)
+	if err != nil {
+		log.Printf("Invalid snapshot received: %s", err)
+		w.WriteHeader(400)
+		w.Write([]byte("Invalid snapshot"))
+		return
+	}
+	log.Printf("Received snapshot for game %s", gameSnapshot.GameID)
+	server.applyUpdate(gameSnapshot)
+	w.WriteHeader(202)
+}
+
+func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
+
+	server.gamesLock.Lock()
+	defer server.gamesLock.Unlock()
+	gameId := uuid.MustParse(gameSnapshot.GameID)
+	game, exists := server.games[gameId]
+	if !exists {
+		gameRoom := Game{
+			resultChan: server.gameResults,
+			mu:         sync.Mutex{},
+		}
+		game = &gameRoom
+		server.games[gameId] = game
+		log.Printf("Created game %s", gameId)
+	}
+	if gameSnapshot.Delete {
+		delete(server.games, gameId)
+		log.Printf("Removed game %s", gameId)
+	} else {
+		game.ApplySnapshot(gameSnapshot)
+		log.Printf("Updated game %s", gameId)
+	}
+}
+
+type GameSnapshots struct {
+	Snapshots []GameSnapshot
+}
+
+func (server *GameServer) GetOwnedSnapshots(w http.ResponseWriter, r *http.Request) {
+	ownedGames := make([]GameSnapshot, 0)
+	for _, game := range server.games {
+		if game.gameServer == server.ID {
+			ownedGames = append(ownedGames, game.CreateSnapshot(false))
+		}
+	}
+	ownedGamesBytes, err := json.Marshal(GameSnapshots{Snapshots: ownedGames})
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Write(ownedGamesBytes)
+}
+
+func (server *GameServer) broadcastGameState(message GameSnapshot) error {
+	// Marshal the message
+	log.Printf("Broadcasting snapshot for game: %s", message.GameID)
+	messageBytes, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	server.RefreshOtherGameServersList()
+	for _, gs := range server.otherGameServers {
+		url := gs.URL + "/internal"
+		log.Printf("Sending request to: %s", url)
+		ack, err := http.Post(url, "application/json", bytes.NewBuffer(messageBytes))
+		if err != nil {
+			// TODO: If no response update the nameserver
+			return err
+		}
+		ack.Body.Close()
+		if ack.StatusCode != 202 {
+			return fmt.Errorf(
+				"Received improper ack (%d) from server \"%s\"",
+				ack.StatusCode,
+				url,
+			)
+		}
+	}
+	log.Printf("Message Broadcast Successful")
+
+	return nil
 }
 
 // Register with the Name Server
@@ -81,6 +181,24 @@ func (server *GameServer) Register(url string) {
 	server.ID = id
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
+	// Get current snapshots
+	server.RefreshOtherGameServersList()
+	for i := range server.otherGameServers {
+		otherServer := server.otherGameServers[i]
+		res, err := http.Get(otherServer.URL + "/snapshots")
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		snapshots, err := ParseJsonResponseData[GameSnapshots](res)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for j := range snapshots.Snapshots {
+			server.applyUpdate(snapshots.Snapshots[j])
+		}
+	}
 }
 
 // Refreshes and sets the list of known other Game Servers.
@@ -110,9 +228,12 @@ func (server *GameServer) RefreshOtherGameServersList() {
 
 	// Set the list of known other Game Servers
 	server.otherGameServersMu.Lock()
-	log.Println("Game Servers refresh")
 	server.otherGameServers = otherGameServers
 	server.otherGameServersMu.Unlock()
+	log.Println("Refreshed the list of other Game Servers")
+	for _, gs := range server.otherGameServers {
+		log.Printf("    %d: %s", gs.ID, gs.URL)
+	}
 }
 
 // Start the ticker to periodically refresh the list of other Game Servers.
@@ -167,9 +288,17 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// create a new client for this request
-	client := NewClient(registerMessage.Username, conn, server.unregister, func(client *Client) {
-		server.register <- client
-	})
+	client := NewClient(
+		registerMessage.Username,
+		conn,
+		server.unregister,
+		func(client *Client) {
+			server.register <- client
+		},
+		func(g *Game) {
+			server.broadcastGameState(g.CreateSnapshot(false))
+		},
+	)
 	server.clients[client.username] = &client
 
 	go client.readThread()
@@ -184,52 +313,59 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	// server.register <- &client
 	log.Printf("Client \"%s\" connected", client.username)
 	// Find the game the user is attached to
-	var pendingGame *PendingGame = nil
+	var pendingGame *Game = nil
 	var opponent *Client = nil
-	for _, pg := range server.pendingGames {
-		if pg.match.BlackPlayer == client.username {
+	server.gamesLock.Lock()
+	for _, pg := range server.games {
+		if pg.blackPlayerUsername == client.username {
 			pendingGame = pg
 			pendingGame.mu.Lock()
 			defer pendingGame.mu.Unlock()
-			pendingGame.blackClient = &client
-			opponent = pg.redClient
+			pendingGame.blackPlayer = &client
+			opponent = pg.redPlayer
 			break
 		}
-		if pg.match.RedPlayer == client.username {
+		if pg.redPlayerUsername == client.username {
 			pendingGame = pg
 			pendingGame.mu.Lock()
 			defer pendingGame.mu.Unlock()
-			pendingGame.redClient = &client
-			opponent = pendingGame.blackClient
+			pendingGame.redPlayer = &client
+			opponent = pendingGame.blackPlayer
 			break
 		}
 	}
-	log.Printf("Game Identified %s\n", pendingGame.match.MatchID)
+	server.gamesLock.Unlock()
 	if pendingGame == nil {
 		log.Printf("Player %s is not in a pending game\n", client.username)
 		return
 	}
+	log.Printf("Game Identified %s\n", pendingGame.gameID)
 
 	// If the other player hasn't registered start a timeout
 	if opponent == nil {
-		// TODO: Start forfeit timeout
+		//Start forfeit timeout
 		log.Println("Waiting for opponent")
 
-		matchID := pendingGame.match.MatchID
+		matchID := pendingGame.gameID
 
 		time.AfterFunc(5*time.Second, func() {
-			game, exists := server.pendingGames[matchID]
+			server.gamesLock.Lock()
+			defer server.gamesLock.Unlock()
+			game, exists := server.games[matchID]
 			if exists {
-				log.Println("Failed to find opponent in time. Ending match...")
-				opponentUsername := game.match.BlackPlayer
+				opponentUsername := game.blackPlayerUsername
+				opponentClient := game.blackPlayer
 				color := "red"
 				if opponentUsername == client.username {
-					opponentUsername = game.match.RedPlayer
+					opponentUsername = game.redPlayerUsername
+					opponentClient = game.blackPlayer
 					color = "black"
 				}
+				if opponentClient == nil {
+					log.Println("Failed to find opponent in time. Ending match...")
 
-				server.HandlePlayerDisconnect(matchID, client, color, opponentUsername)
-
+					server.HandlePlayerDisconnect(matchID, client, color, opponentUsername)
+				}
 				return
 			}
 		})
@@ -237,16 +373,17 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// If the other player has registered start the game
-	log.Printf("Starting game: %s", pendingGame.match.MatchID)
-	server.StartGame(pendingGame)
+	log.Printf("Starting game: %s", pendingGame.gameID)
+	server.StartGame(pendingGame.gameID)
 }
 
 // client is the client that is still connected
 func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Client, clientColor string, opponentUsername string) {
 	gameResult := GameResult{
 		GameID: matchID,
-		Winner: &client.username,
-		Loser:  &opponentUsername,
+		Winner: client.username,
+		Loser:  opponentUsername,
+		IsDraw: false,
 	}
 
 	gameEndMessage := GameEndMessage{
@@ -274,43 +411,48 @@ func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uuid := match.MatchID
-	pendingGame := PendingGame{
-		match:       match,
-		redClient:   nil,
-		blackClient: nil,
-		mu:          sync.Mutex{},
+	pendingGame := Game{
+		gameID:              uuid,
+		gameServer:          server.ID,
+		redPlayer:           nil,
+		blackPlayer:         nil,
+		redPlayerUsername:   match.RedPlayer,
+		blackPlayerUsername: match.BlackPlayer,
+		tileStates:          generateInitialTileStates(),
+		turn:                Red,
+		previousMoves:       make([]GameMove, 0),
+		resultChan:          server.gameResults,
+		mu:                  sync.Mutex{},
 	}
-	server.pendingGames[uuid] = &pendingGame
+	server.gamesLock.Lock()
+	defer server.gamesLock.Unlock()
+	server.games[uuid] = &pendingGame
+	err = server.broadcastGameState(pendingGame.CreateSnapshot(false))
+	if err != nil {
+		log.Printf("Failed to broadcast game creation: %s", err)
+	}
 	log.Printf("Created pending game: %s", uuid)
+
 }
 
-func (server *GameServer) StartGame(pendingGame *PendingGame) {
-	gameID := pendingGame.match.MatchID
-	delete(server.pendingGames, gameID)
-	match := pendingGame.match
-	redClient := pendingGame.redClient
-	blackClient := pendingGame.blackClient
+func (server *GameServer) StartGame(gameID uuid.UUID) {
+	server.gamesLock.Lock()
+	defer server.gamesLock.Unlock()
+	game := server.games[gameID]
+	if game.gameServer != server.ID {
+		panic("Attempted to start game by non-owning server")
+	}
+	redClient := game.redPlayer
+	blackClient := game.blackPlayer
 	if redClient == nil {
 		panic("Attempted to start game with nil red client")
 	}
 	if blackClient == nil {
 		panic("Attempted to start game with nil black client")
 	}
-	gameRoom := Game{
-		gameID:        gameID,
-		redPlayer:     redClient,
-		blackPlayer:   blackClient,
-		tileStates:    generateInitialTileStates(),
-		turn:          Red,
-		previousMoves: make([]GameMove, 0),
-		resultChan:    server.gameResults,
-		mu:            sync.Mutex{},
-	}
-	server.games[gameRoom.gameID] = &gameRoom
-	log.Println("Game room created")
 	// tell both servers about the new game
-	redMessage := gameRoom.messageFromNewGame("red", match.BlackPlayer)
-	blackMessage := gameRoom.messageFromNewGame("black", match.RedPlayer)
+	redMessage := game.messageFromNewGame("red", game.blackPlayerUsername)
+	blackMessage := game.messageFromNewGame("black", game.redPlayerUsername)
 	redBytes, err := json.Marshal(redMessage)
 	if err != nil {
 		log.Println(err)
@@ -321,11 +463,29 @@ func (server *GameServer) StartGame(pendingGame *PendingGame) {
 		log.Println(err)
 		return
 	}
-	server.clients[gameRoom.blackPlayer.username].currentGame = &gameRoom
-	server.clients[gameRoom.redPlayer.username].currentGame = &gameRoom
+	server.clients[game.blackPlayer.username].currentGame = game
+	server.clients[game.redPlayer.username].currentGame = game
 	// send the message that they have found a game to both players
-	server.clients[gameRoom.blackPlayer.username].send <- blackBytes
-	server.clients[gameRoom.redPlayer.username].send <- redBytes
+	server.clients[game.blackPlayer.username].send <- blackBytes
+	server.clients[game.redPlayer.username].send <- redBytes
+
+	initialState := GameStateUpdate{
+		Kind:          "update_state",
+		TileStates:    game.tileStates,
+		Turn:          "red",
+		PreviousMoves: game.previousMoves,
+	}
+
+	if game.turn == Black {
+		initialState.Turn = "black"
+	}
+	initialStateBytes, err := json.Marshal(initialState)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	server.clients[game.blackPlayer.username].send <- initialStateBytes
+	server.clients[game.redPlayer.username].send <- initialStateBytes
 }
 
 // main idea of this loop is to register new active users and put them
@@ -333,60 +493,28 @@ func (server *GameServer) StartGame(pendingGame *PendingGame) {
 func (server *GameServer) ServerLoop() {
 	for {
 		select {
-		case client := <-server.register:
-			// Find the game the user is attached to
-			var pendingGame *PendingGame = nil
-			var opponent *Client = nil
-			for _, pg := range server.pendingGames {
-				if pg.match.BlackPlayer == client.username {
-					pendingGame = pg
-					opponent = pg.redClient
-					break
-				}
-				if pg.match.RedPlayer == client.username {
-					pendingGame = pg
-					opponent = pendingGame.blackClient
-					break
-				}
-			}
-			if pendingGame == nil {
-				log.Printf("Player %s is not in a pending game\n", client.username)
-				break
-			}
+		case <-server.register:
 
-			// If the other player hasn't registered start a timeout
-			if opponent == nil {
-				// TODO: Start forfeit timeout
-				break
-			}
-			// If the other player has registered start the game
-			server.StartGame(pendingGame)
 		case <-server.unregister:
 			log.Println("Attempted unregister")
 			// TODO: remove client from game rooms
 		case gameResult := <-server.gameResults:
-			_, exists := server.games[gameResult.GameID]
+			log.Printf(
+				"Handling game result (game=%s)",
+				gameResult.GameID,
+			)
+			server.gamesLock.Lock()
+			game, exists := server.games[gameResult.GameID]
 
 			if exists {
-				// server.Mu_leaderboard.Lock()
-				// server.leaderboard.UpdateLeaderboard(gameResult)
-				// server.Mu_leaderboard.Unlock()
-
-				// game.mu.Lock()
-				// if game.blackPlayer != nil {
-				// 	game.blackPlayer.currentGame = nil
-				// }
-				// if game.redPlayer != nil {
-				// 	game.redPlayer.currentGame = nil
-				// }
-				// game.mu.Unlock()
-
+				server.broadcastGameState(game.CreateSnapshot(true))
 				server.informMatchmakerGameEnded(gameResult)
 
 				delete(server.games, gameResult.GameID)
 			} else {
 				log.Printf("Game %s does not exist\n", gameResult.GameID)
 			}
+			server.gamesLock.Unlock()
 		}
 	}
 }
