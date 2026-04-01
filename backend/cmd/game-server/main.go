@@ -18,7 +18,7 @@ var (
 func main() {
 	// Reading command line
 	flag.Parse()
-	godotenv.Load(".env") 
+	godotenv.Load(".env")
 	godotenv.Load("../.env")
 	godotenv.Load("../../.env")
 	godotenv.Load("../../../.env")
@@ -27,7 +27,7 @@ func main() {
 	nameServerURL := Checkered.ParseStringOption(*nameServerURL, "APP_NAMESERVER_URL", "http://localhost:9000")
 
 	log.Printf("Using name server located at %s\n", nameServerURL)
-	
+
 	url := Checkered.GetFullURL(addr)
 
 	// Create the server object

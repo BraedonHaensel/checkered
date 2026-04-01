@@ -3,7 +3,6 @@ package checkered
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,13 +21,18 @@ const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
 // maintaining the leaderboard and handling all leaderboard requests
 type Matchmaker struct {
 	ID int
+
+	// Current version for tracking the latest states among Matchmakers
+	syncVersion   int
+	syncVersionMu sync.Mutex
+
 	// games that new clients are in
-	matches        map[uuid.UUID]*Match
-	mu_matches     sync.Mutex
-	queue          Queue[string]
-	mu_queue       sync.Mutex
-	leaderboard    *Leaderboard
-	mu_leaderboard sync.Mutex
+	matches       map[uuid.UUID]*Match
+	matchesMu     sync.Mutex
+	queue         Queue[string]
+	queueMu       sync.Mutex
+	leaderboard   *Leaderboard
+	leaderboardMu sync.Mutex
 
 	// Fully qualified URL of this Matchmaker
 	URL string
@@ -48,69 +52,31 @@ type Matchmaker struct {
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
 	bullyTimerChan chan struct{}
-	// Timer and chan to wait for and detect receiving a leader(i) response
+	// Timer and chan to wait for and detect receiving a leader response
 	leaderTimer     *time.Timer
 	leaderTimerChan chan struct{}
+
+	// Locks to pause client requests during synchronizations during a leader election
+	AcceptingClientRequestsMu sync.RWMutex // multiple request handlers acquire read locks
+	isClientRequestsLocked    bool         // check if write lock is already acquired
+	isClientRequestsLockedMu  sync.Mutex   // lock to safely check the above bool
 }
 
-type AllDataResponse struct {
-	Leaderboard 	Leaderboard 			`json:"leaderboard"`
-	Queue 			Queue[string]			`json:"queue"`
-	Matches 		map[uuid.UUID]*Match	`json:"matches"`
+// All data that gets synchronized between Matchmakers
+type AllSyncedData struct {
+	SyncVersion int                  `json:"sync_version"`
+	Leaderboard Leaderboard          `json:"leaderboard"`
+	Queue       Queue[string]        `json:"queue"`
+	Matches     map[uuid.UUID]*Match `json:"matches"`
 }
 
-func (m *Matchmaker) ChooseRandomOtherServer() (*Server, error) {
-	m.otherMatchmakersMu.Lock()
-	defer m.otherMatchmakersMu.Unlock()
-
-	// If there are no other matchmakers, then there is no way so recover from a failed server.
-	if len(m.otherMatchmakers) == 0 {
-		return nil, errors.New("No other servers")
-	}
-
-	// Otherwise, choose a different server and request the up to date information from them.
-	return &m.otherMatchmakers[0], nil
+// Leader message, includes the latest Matchmaker data to synchronize with
+type LeaderMessage struct {
+	Leader     Server        `json:"leader"`
+	LatestData AllSyncedData `json:"latest_data"`
 }
 
-func (m *Matchmaker) RequestUpdatedData(other Server) {
-
-	res, err := http.Get(other.URL + "/internal/request-data")
-	if err != nil {
-		// TODO: Handle failure 
-		panic("Failed to request data from other server!")
-	}
-	defer res.Body.Close()
-
-	response, err := ParseJsonResponseData[AllDataResponse](res)
-	if err != nil {
-		// TODO: Handle failure 
-		panic("Failed to decode response for /internal/requestData")
-	}
-
-	m.leaderboard = &response.Leaderboard
-	m.queue = response.Queue
-	m.matches = response.Matches
-}
-
-func (m *Matchmaker) PackageData(w http.ResponseWriter, r *http.Request) {
-	m.mu_leaderboard.Lock()
-	m.mu_queue.Lock()
-	m.mu_matches.Lock()
-	data := AllDataResponse{
-		Leaderboard: *m.leaderboard,
-		Queue: m.queue,
-		Matches: m.matches,
-	}
-	m.mu_matches.Unlock()
-	m.mu_queue.Unlock()
-	m.mu_leaderboard.Unlock()
-
-	err := json.NewEncoder(w).Encode(data)
-	if err != nil {
-		panic("Failed to encode json data for package request")
-	}
-}
-
+// Matchmaker constructor
 func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[string]{}
 	InitQueue(&queue, 100)
@@ -120,17 +86,125 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 		leaderboard: &Leaderboard{
 			Board: make([]LeaderboardEntry, 0),
 		},
-		mu_leaderboard: sync.Mutex{},
+		leaderboardMu: sync.Mutex{},
 
-		URL:               url,
-		nameServerURL:     nameServerURL,
-		runningInElection: false,
-		otherMatchmakers:  []Server{},
+		URL:                    url,
+		nameServerURL:          nameServerURL,
+		runningInElection:      false,
+		otherMatchmakers:       []Server{},
+		syncVersion:            0,
+		isClientRequestsLocked: false,
 	}
 	return &matchmaker
 }
 
+// Sends a request to another Matchmaker for the latest data in order to synchronize
+// this Matchmaker's state before announcing itself as the new leader.
+// Returns (*data, isSuccess, isAlive)
+func (m *Matchmaker) SendNewLeaderDataSyncRequest(otherMatchmaker Server) (*AllSyncedData, bool, bool) {
+	// Send new leader data sync request
+	res, err := http.Post(otherMatchmaker.URL+"/internal/new-leader-data-sync", "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to send a new leader data sync request to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
+		return nil, false, false // failed, server is down
+	}
+	defer res.Body.Close()
+
+	data, err := ParseJsonResponseData[AllSyncedData](res)
+	if err != nil {
+		log.Println("Failed to decode response for /internal/new-leader-data-sync", err)
+		return nil, false, true // failed, server is alive
+	}
+	return &data, true, true // success
+}
+
+// Gets all data synchronized between Matchmakers.
+func (m *Matchmaker) GetAllSyncedData() AllSyncedData {
+	// Bundle all of this Matchmaker's data that gets synchronized
+	m.syncVersionMu.Lock()
+	m.leaderboardMu.Lock()
+	m.queueMu.Lock()
+	m.matchesMu.Lock()
+
+	data := AllSyncedData{
+		SyncVersion: m.syncVersion,
+		Leaderboard: *m.leaderboard,
+		Queue:       m.queue,
+		Matches:     m.matches,
+	}
+
+	m.matchesMu.Unlock()
+	m.queueMu.Unlock()
+	m.leaderboardMu.Unlock()
+	m.syncVersionMu.Unlock()
+
+	return data
+}
+
+// Sets all data synchronized between Matchmakers.
+func (m *Matchmaker) SetAllSyncedData(data AllSyncedData) {
+	// Unpack and update state from the data
+	m.syncVersionMu.Lock()
+	m.leaderboardMu.Lock()
+	m.queueMu.Lock()
+	m.matchesMu.Lock()
+
+	m.syncVersion = data.SyncVersion
+	m.leaderboard = &data.Leaderboard
+	m.queue = data.Queue
+	m.matches = data.Matches
+
+	log.Println("Matchmaker data updated to sync version:", m.syncVersion)
+
+	m.matchesMu.Unlock()
+	m.queueMu.Unlock()
+	m.leaderboardMu.Unlock()
+	m.syncVersionMu.Unlock()
+}
+
+// Handles a request from another Matchmaker for the latest data in order to synchronize
+// the requester's state before the requester announcing itself as the new leader.
+func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received a data sync request from a new leader")
+	// Pause client requests until the synchronization is complete and the leader(i, latestData)
+	// message has been received
+	m.PauseClientRequests()
+
+	// Send this Matchmaker's data
+	data := m.GetAllSyncedData()
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		panic("Failed to encode json data for package request")
+	}
+}
+
 // -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
+
+// Pauses client requests (unless already paused)
+func (m *Matchmaker) PauseClientRequests() {
+	// Check if client requests are already paused
+	m.isClientRequestsLockedMu.Lock()
+	if !m.isClientRequestsLocked {
+		// Acquire the write lock to pause client requests
+		m.isClientRequestsLocked = true
+		m.AcceptingClientRequestsMu.Lock()
+		log.Println("Paused client requests!")
+	}
+	m.isClientRequestsLockedMu.Unlock()
+}
+
+// Resumes client requests (unless already resumed)
+func (m *Matchmaker) ResumeClientRequests() {
+	// Check if client requests are already resumed
+	m.isClientRequestsLockedMu.Lock()
+	if m.isClientRequestsLocked {
+		// Release the write lock to resume client requests
+		m.isClientRequestsLocked = false
+		m.AcceptingClientRequestsMu.Unlock()
+		log.Println("Resumed client requests!")
+	}
+	m.isClientRequestsLockedMu.Unlock()
+}
 
 // Register with the Name Server
 func (m *Matchmaker) Register(url string) {
@@ -174,7 +248,7 @@ func (m *Matchmaker) RefreshOtherMatchmakersList() {
 
 	// Set the list of known other Matchmakers
 	m.otherMatchmakersMu.Lock()
-	log.Println("Refreshed the list of other Matchmakers")
+	log.Println("Matchmakers refresh")
 	m.otherMatchmakers = otherMatchmakers
 	m.otherMatchmakersMu.Unlock()
 }
@@ -214,6 +288,77 @@ func (m *Matchmaker) DeregisterGameServer(gameServerID int) {
 	defer res.Body.Close()
 }
 
+// Gets the latest data from all Matchmakers.
+func (m *Matchmaker) GetLatestMatchmakerData() AllSyncedData {
+	log.Println("Getting the latest data from all Matchmakers")
+	// Start by assuming the latest data is your own
+	latestData := m.GetAllSyncedData()
+
+	// Get the latest data from all Matchmakers
+	m.otherMatchmakersMu.Lock()
+	downMatchmakers := []Server{}
+	for _, otherMatchmaker := range m.otherMatchmakers {
+		data, isSuccess, isAlive := m.SendNewLeaderDataSyncRequest(otherMatchmaker)
+		if !isSuccess {
+			if !isAlive {
+				// Matchmaker is down
+				downMatchmakers = append(downMatchmakers, otherMatchmaker)
+			}
+			continue
+		}
+
+		if data.SyncVersion > latestData.SyncVersion {
+			// Received newer data
+			latestData = *data
+		}
+	}
+	m.otherMatchmakersMu.Unlock()
+
+	// Deregister any Matchmakers that did not respond
+	for _, otherMatchmaker := range downMatchmakers {
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+	}
+
+	return latestData
+}
+
+// Synchronizes with the latest data from all Matchmakers, then sends leader messages with it.
+func (m *Matchmaker) SynchronizeDataAndSendLeaderMessages() {
+	// Pause client requests while synchronizing data for the leader(i, latestData) messages
+	m.PauseClientRequests()
+
+	// Get the latest data from all Matchmakers.
+	latestData := m.GetLatestMatchmakerData()
+
+	if latestData.SyncVersion > m.syncVersion {
+		// Update to the latest data
+		m.SetAllSyncedData(latestData)
+	}
+
+	m.runningInElectionMu.Lock()
+	m.runningInElection = false
+	m.runningInElectionMu.Unlock()
+
+	// Send leader(i, latestData) messages with the latest synced Matchmaker data
+	m.otherMatchmakersMu.Lock()
+	log.Println("Sending leader messages")
+	downMatchmakers := []Server{}
+	for _, otherMatchmaker := range m.otherMatchmakers {
+		if !m.sendLeaderMessage(otherMatchmaker, latestData) {
+			downMatchmakers = append(downMatchmakers, otherMatchmaker)
+		}
+	}
+	m.otherMatchmakersMu.Unlock()
+
+	// Deregister any Matchmakers that did not respond
+	for _, otherMatchmaker := range downMatchmakers {
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+	}
+
+	// Election complete, resume handling client requests
+	m.ResumeClientRequests()
+}
+
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
 	m.runningInElectionMu.Lock()
@@ -235,29 +380,15 @@ func (m *Matchmaker) InitiateElection() {
 	if len(higherIDMatchmakers) == 0 {
 		// This server has the highest ID, declare itself leader
 		m.leaderIDMu.Lock()
-		log.Println("Declaring itself leader as it has the highest ID:", m.ID)
+		log.Printf("Declaring itself leader (has highest ID [%d])", m.ID)
 		m.Leader = Server{
 			ID:  m.ID,
 			URL: m.URL,
 		}
 		m.leaderIDMu.Unlock()
-		m.runningInElectionMu.Lock()
-		m.runningInElection = false
-		m.runningInElectionMu.Unlock()
-		m.otherMatchmakersMu.Lock()
-		log.Printf("Sending leader(%d) messages\n", m.ID)
-		downMatchmakers := []Server{}
-		for _, otherMatchmaker := range m.otherMatchmakers {
-			if !m.sendLeaderMessage(otherMatchmaker) {
-				downMatchmakers = append(downMatchmakers, otherMatchmaker)
-			}
-		}
-		m.otherMatchmakersMu.Unlock()
 
-		// Deregister any Matchmakers that did not respond
-		for _, otherMatchmaker := range downMatchmakers {
-			m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
-		}
+		// Get the latest data from all Matchmakers, then send leader messages with it
+		m.SynchronizeDataAndSendLeaderMessages()
 		return
 	}
 
@@ -294,39 +425,24 @@ func (m *Matchmaker) InitiateElection() {
 			URL: m.URL,
 		}
 		m.leaderIDMu.Unlock()
-		m.runningInElectionMu.Lock()
-		m.runningInElection = false
-		m.runningInElectionMu.Unlock()
-		m.otherMatchmakersMu.Lock()
-		log.Printf("Sending leader(%d) messages\n", m.ID)
-		downMatchmakers := []Server{}
-		for _, otherMatchmaker := range m.otherMatchmakers {
-			if !m.sendLeaderMessage(otherMatchmaker) {
-				downMatchmakers = append(downMatchmakers, otherMatchmaker)
-			}
-		}
-		m.otherMatchmakersMu.Unlock()
 
-		// Deregister any Matchmakers that did not respond
-		for _, otherMatchmaker := range downMatchmakers {
-			m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
-		}
-		return
+		// Get the latest data from all Matchmakers, then send leader messages with it
+		m.SynchronizeDataAndSendLeaderMessages()
 
 	case <-m.bullyTimerChan:
-		// Bullied before the timer fired. Wait for a leader(i) message
-		log.Printf("Received a bully() response. Waiting up to %dms for a leader(i) message\n",
+		// Bullied before the timer fired. Wait for a leader message
+		log.Printf("Received a bully() response. Waiting up to %dms for a leader message\n",
 			LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
 		m.leaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
 		m.leaderTimerChan = make(chan struct{})
 		select {
 		case <-m.leaderTimer.C:
-			// Timer fired, so no leader(i) received. Something went wrong, so initiate
+			// Timer fired, so no leader received. Something went wrong, so initiate
 			// a new election
-			log.Println("No leader(i) responses received")
+			log.Println("No leader responses received")
 			m.InitiateElection()
 		case <-m.leaderTimerChan:
-			// Received a leader(i) message. The message is handled by the leader(i)
+			// Received a leader message. The message is handled by the leader
 			// message handler, so return
 			return
 		}
@@ -356,22 +472,26 @@ func (m *Matchmaker) sendElectionMessage(otherMatchmaker Server) bool {
 	return true
 }
 
-// Sends a leader(i) message to another Matchmaker. Returns true if the recipient
-// is alive.
-func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server) bool {
-	// Create the leader(i) message data
-	data := Server{
-		ID:  m.ID,
-		URL: m.URL,
+// Sends a leader(i, latestData) message to another Matchmaker. Returns true if
+// the recipient is alive.
+func (m *Matchmaker) sendLeaderMessage(otherMatchmaker Server, latestData AllSyncedData) bool {
+	// Create the leader(i, latestData) message
+	data := LeaderMessage{
+		Leader: Server{
+			ID:  m.ID,
+			URL: m.URL,
+		},
+		LatestData: latestData,
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Send a leader(i) message
+
+	// Send the leader(i, latestData) message
 	res, err := http.Post(otherMatchmaker.URL+"/internal/leader-election/leader", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Failed to send a leader(%d) message to Matchmaker %d, assuming it is down", m.ID, otherMatchmaker.ID)
+		log.Printf("Failed to send a leader message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
 		return false
 	}
 	defer res.Body.Close()
@@ -411,7 +531,7 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 
 	if id < m.ID {
 		// Message received from a server with a lower ID, so bully them.
-		log.Printf("Received election(%d). Bullying as this Matchmaker's ID is higher: %d\n", id, m.ID)
+		log.Printf("Received election(%d). Bullying as this Matchmaker's ID [%d] is higher", id, m.ID)
 		m.sendBullyMessage(otherMatchmaker)
 		m.runningInElectionMu.Lock()
 		defer m.runningInElectionMu.Unlock()
@@ -422,7 +542,7 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// Handle an incoming leader(i) Bully leader election message.
+// Handle an incoming leader(i, latestData) Bully leader election message.
 func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request) {
 	// If this server was waiting, interrupt the leader timer so it never fires
 	if m.leaderTimer != nil && m.leaderTimer.Stop() {
@@ -433,13 +553,14 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse the Matchmaker's ID from the request
-	otherMatchmaker, err, errStatus := parseJsonRequestData[Server](r)
+	data, err, errStatus := parseJsonRequestData[LeaderMessage](r)
 	if err != nil {
 		errMsg := fmt.Errorf("HandleLeaderRequest error: %w", err)
 		log.Println(errMsg)
 		http.Error(w, errMsg.Error(), errStatus)
 		return
 	}
+	otherMatchmaker := data.Leader
 
 	// Check if the message is from an unknown Matchmaker
 	m.otherMatchmakersMu.Lock()
@@ -453,9 +574,18 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	log.Println("Received a new leader ID:", otherMatchmaker.ID)
 	m.Leader = otherMatchmaker
 	m.leaderIDMu.Unlock()
+
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
 	m.runningInElectionMu.Unlock()
+
+	if data.LatestData.SyncVersion > m.syncVersion {
+		// Synchronize with the new leader's data
+		m.SetAllSyncedData(data.LatestData)
+	}
+
+	// Resume Client requests
+	m.ResumeClientRequests()
 }
 
 // Handle an incoming bully() Bully leader election message.
@@ -475,7 +605,7 @@ func (m *Matchmaker) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(m.leaderboard)
 	if err != nil {
 		errorStr := fmt.Errorf("getLeaderboard error: %v", err)
-		fmt.Println(errorStr)
+		log.Println(errorStr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -562,13 +692,13 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is already in queue
 	alreadyQueued := false
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			alreadyQueued = true
 		}
 	})
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 
 	if alreadyQueued {
 		log.Printf("Player \"%s\" already in queue", username)
@@ -579,17 +709,17 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue the user
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
 	m.queue.enqueue(username)
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 	log.Printf("Adding \"%s\" to queue", username)
 
 	// Matchmaking logic
 	if m.queue.Size >= 2 {
-		m.mu_queue.Lock()
+		m.queueMu.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
-		m.mu_queue.Unlock()
+		m.queueMu.Unlock()
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to create match: %v", err)
@@ -597,12 +727,12 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
-		m.mu_matches.Lock()
+		m.matchesMu.Lock()
 		m.matches[match.MatchID] = &match
-		m.mu_matches.Unlock()
+		m.matchesMu.Unlock()
 
 		// Marshal the match to JSON
-		matchBytes, err := json.Marshal(match)
+		matchBytes, err := json.Marshal(&match)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
 			log.Println(errMsg)
@@ -610,7 +740,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		m.broadcastMatchesChanged()
+		m.IncrementSyncVersion()
+		m.broadcastMatchesUpdate()
 
 		// Send a POST request to the game server with the match details
 		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
@@ -625,7 +756,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
 	}
 
-	m.broadcastQueueChanged()
+	m.IncrementSyncVersion()
+	m.broadcastQueueUpdate()
 
 	// Let the user know they're in queue
 	w.Header().Set("Content-Type", "application/json")
@@ -640,12 +772,12 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Reading the data in the request
 	username := r.URL.Query().Get("username")
-	m.mu_matches.Lock()
+	m.matchesMu.Lock()
 
 	// Check if the user is in a match
 	for matchID, match := range m.matches {
 		if match.RedPlayer == username || match.BlackPlayer == username {
-			m.mu_matches.Unlock()
+			m.matchesMu.Unlock()
 			// User has been matched, return the game server URL
 			log.Printf("User \"%s\" has been matched, sending game server [%d] %s", username, match.GameServer.ID, match.GameServer.URL)
 			w.Header().Set("Content-Type", "application/json")
@@ -654,17 +786,17 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	m.mu_matches.Unlock()
+	m.matchesMu.Unlock()
 
 	// Check if user is already in queue
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
 	alreadyQueued := false
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			alreadyQueued = true
 		}
 	})
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 
 	if alreadyQueued {
 		w.Header().Set("Content-Type", "application/json")
@@ -706,14 +838,14 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	username := data.Username
 
 	// Check if user is actually in the queue
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
 	inQueue := false
 	m.queue.forEach(func(u string, i int) {
 		if u == username {
 			inQueue = true
 		}
 	})
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 
 	if !inQueue {
 		log.Printf("User \"%s\" tried to leave queue but was not in it", username)
@@ -722,12 +854,13 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_NOT_IN_QUEUE"})
 		return
 	}
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
 	RemoveStringValue(&m.queue, username)
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 	log.Printf("User \"%s\" left the queue", username)
 
-	m.broadcastQueueChanged()
+	m.IncrementSyncVersion()
+	m.broadcastQueueUpdate()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -759,9 +892,9 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	}
 	oldGameServer := data.OldGameServer
 
-	m.mu_matches.Lock()
+	m.matchesMu.Lock()
 	match := m.matches[data.MatchID]
-	m.mu_matches.Unlock()
+	m.matchesMu.Unlock()
 
 	// Lock the match in case the opponent is making the same request
 	match.Mu.Lock()
@@ -810,8 +943,9 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	// Switch the match to the new Game Server
 	match.GameServer = gameServer
 
+	m.IncrementSyncVersion()
 	// Broadcast the match change to the backup Matchmakers
-	m.broadcastMatchesChanged()
+	m.broadcastMatchesUpdate()
 
 	// Marshal the match to JSON
 	matchBytes, err := json.Marshal(match)
@@ -850,13 +984,14 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the leaderboard
-	m.mu_leaderboard.Lock()
+	m.leaderboardMu.Lock()
 	isNotADraw := m.leaderboard.UpdateLeaderboard(data)
-	m.mu_leaderboard.Unlock()
+	m.leaderboardMu.Unlock()
 
 	if isNotADraw {
+		m.IncrementSyncVersion()
 		// Broadcast the new leaderboard if the game did not end in a draw
-		m.broadcastLeaderboardChanged()
+		m.broadcastLeaderboardUpdate()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -877,10 +1012,10 @@ func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 	matchID := data.MatchID
 
 	// Check if the match exists
-	m.mu_matches.Lock()
+	m.matchesMu.Lock()
 	_, exists := m.matches[matchID]
 	if !exists {
-		m.mu_matches.Unlock()
+		m.matchesMu.Unlock()
 		log.Printf("EndMatch: match %s not found", matchID)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -890,10 +1025,11 @@ func (m *Matchmaker) EndMatch(w http.ResponseWriter, r *http.Request) {
 
 	// Remove the match
 	delete(m.matches, matchID)
-	m.mu_matches.Unlock()
+	m.matchesMu.Unlock()
 	log.Printf("Match %s ended and removed", matchID)
 
-	m.broadcastMatchesChanged()
+	m.IncrementSyncVersion()
+	m.broadcastMatchesUpdate()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -909,10 +1045,11 @@ func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.mu_leaderboard.Lock()
-	log.Printf("New leaderboard: %v", data)
+	m.leaderboardMu.Lock()
+	log.Printf("Leaderboard update received: %v", data)
 	m.leaderboard = &data
-	m.mu_leaderboard.Unlock()
+	m.IncrementSyncVersion()
+	m.leaderboardMu.Unlock()
 }
 
 func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
@@ -924,9 +1061,11 @@ func (m *Matchmaker) SetQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.mu_queue.Lock()
+	m.queueMu.Lock()
+	log.Println("Queue update received")
 	m.queue = data
-	m.mu_queue.Unlock()
+	m.IncrementSyncVersion()
+	m.queueMu.Unlock()
 }
 
 func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
@@ -938,9 +1077,19 @@ func (m *Matchmaker) SetMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.mu_matches.Lock()
+	m.matchesMu.Lock()
+	log.Println("Matches update received")
 	m.matches = data
-	m.mu_matches.Unlock()
+	m.IncrementSyncVersion()
+	m.matchesMu.Unlock()
+}
+
+// Increments the sync version used to track how recent a data state is
+func (m *Matchmaker) IncrementSyncVersion() {
+	m.syncVersionMu.Lock()
+	m.syncVersion++
+	log.Println("Sync version incremented to:", m.syncVersion)
+	m.syncVersionMu.Unlock()
 }
 
 func (m *Matchmaker) broadcast(endpoint string, data any) {
@@ -962,20 +1111,26 @@ func (m *Matchmaker) broadcast(endpoint string, data any) {
 	m.otherMatchmakersMu.Unlock()
 }
 
-func (m *Matchmaker) broadcastLeaderboardChanged() {
-	m.mu_leaderboard.Lock()
+// Broadcasts a leaderboard update to all other Matchmakers
+func (m *Matchmaker) broadcastLeaderboardUpdate() {
+	m.leaderboardMu.Lock()
+	log.Println("Broadcasting leaderboard update to backups")
 	m.broadcast("/internal/leaderboard", m.leaderboard)
-	m.mu_leaderboard.Unlock()
+	m.leaderboardMu.Unlock()
 }
 
-func (m *Matchmaker) broadcastQueueChanged() {
-	m.mu_queue.Lock()
+// Broadcasts a queue update to all other Matchmakers
+func (m *Matchmaker) broadcastQueueUpdate() {
+	m.queueMu.Lock()
+	log.Println("Broadcasting queue update to backups")
 	m.broadcast("/internal/queue", m.queue)
-	m.mu_queue.Unlock()
+	m.queueMu.Unlock()
 }
 
-func (m *Matchmaker) broadcastMatchesChanged() {
-	m.mu_matches.Lock()
+// Broadcasts a matches update to all other Matchmakers
+func (m *Matchmaker) broadcastMatchesUpdate() {
+	m.matchesMu.Lock()
+	log.Println("Broadcasting matches update to backups")
 	m.broadcast("/internal/matches", m.matches)
-	m.mu_matches.Unlock()
+	m.matchesMu.Unlock()
 }

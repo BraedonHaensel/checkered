@@ -10,11 +10,15 @@ import (
 // 3. `value` is used.
 // The first successful branch will be the output of the function
 func ParseStringOption(flagValue string, envName string, value string) string {
-	if flagValue != "" { return flagValue }
+	if flagValue != "" {
+		return flagValue
+	}
 
 	if envName != "" {
 		env, success := os.LookupEnv(envName)
-		if(success) { return env }
+		if success {
+			return env
+		}
 	}
 
 	return value
