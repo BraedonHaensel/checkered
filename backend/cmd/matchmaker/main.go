@@ -104,30 +104,14 @@ func main() {
 	// Start a leader election
 	go matchmaker.InitiateElection()
 
-	// TODO move the below to a separate place within the election protocol
-
-	// TODO Update syncVersion as needed when receiving data syncs or performing any operations
-
-	// // Request most recent data
-	// if matchmaker.Leader.ID == matchmaker.ID {
-	// 	// We have become the new leader. We need to request the data from some other server.
-	// 	// Since requests are not closed until everything has been synchronized, we can pull
-	// 	// from any of the other servers, if one exists.
-	// 	other, err := matchmaker.ChooseRandomOtherServer()
-	// 	if err == nil {
-	// 		matchmaker.SendNewLeaderDataSyncRequest(*other)
-	// 	}
-	// } else {
-	// 	// There is another authorative leader. We send the message to them explicitly
-	// 	matchmaker.SendNewLeaderDataSyncRequest(matchmaker.Leader)
-	// }
-
+	// Start listening for requests
 	err := http.ListenAndServe(addr, LeaderMiddleware(matchmaker, Checkered.CORSMiddleware(http.DefaultServeMux)))
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
 
+// Middleware for the initial handling of requests received by this Matchmaker
 func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {

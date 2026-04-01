@@ -110,7 +110,7 @@ func (server *GameServer) RefreshOtherGameServersList() {
 
 	// Set the list of known other Game Servers
 	server.otherGameServersMu.Lock()
-	log.Println("Refreshed the list of other Game Servers")
+	log.Println("Game Servers refresh")
 	server.otherGameServers = otherGameServers
 	server.otherGameServersMu.Unlock()
 }
@@ -217,7 +217,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 
 		matchID := pendingGame.match.MatchID
 
-		time.AfterFunc(5 * time.Second, func() {
+		time.AfterFunc(5*time.Second, func() {
 			game, exists := server.pendingGames[matchID]
 			if exists {
 				log.Println("Failed to find opponent in time. Ending match...")
@@ -233,7 +233,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		})
-		
+
 		return
 	}
 	// If the other player has registered start the game
@@ -246,11 +246,11 @@ func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Clien
 	gameResult := GameResult{
 		GameID: matchID,
 		Winner: &client.username,
-		Loser: &opponentUsername,
+		Loser:  &opponentUsername,
 	}
 
 	gameEndMessage := GameEndMessage{
-		Kind: "game_end",
+		Kind:   "game_end",
 		Winner: clientColor,
 	}
 
@@ -395,7 +395,7 @@ func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
 
 	matchmakingServers, err := SendServerListRequest(
 		server.nameServerURL + "/matchmakers",
-		)
+	)
 	if err != nil {
 		log.Printf("Failed to fetch game servers: %s", err)
 		return
@@ -409,7 +409,7 @@ func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
 		"Selected match making server: %s (ID: %d)",
 		matchmakingServer.URL,
 		matchmakingServer.ID,
-		)
+	)
 
 	gameResultBytes, err := json.Marshal(gameResult)
 	if err != nil {
@@ -420,7 +420,7 @@ func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
 		matchmakingServer.URL+"/match/updateleaderboard",
 		"application/json",
 		bytes.NewBuffer(gameResultBytes),
-		)
+	)
 	if err != nil {
 		log.Printf("Failed to send game results to match making server: %s", err)
 		return
@@ -437,7 +437,7 @@ func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
 		matchmakingServer.URL+"/match/end",
 		"application/json",
 		bytes.NewBuffer(endMatchRequestBytes),
-		)
+	)
 	if err != nil {
 		log.Printf("Failed to send end game %s", err)
 	}
