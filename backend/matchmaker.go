@@ -171,12 +171,34 @@ func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *ht
 	// message has been received
 	m.PauseClientRequests()
 
-	// Send this Matchmaker's data
+	// Get this Matchmaker's data
 	data := m.GetAllSyncedData()
+
+	// Start a timer to wait for a leader message
+	m.leaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	m.leaderTimerChan = make(chan struct{})
+
+	// Send this Matchmaker's data
 	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
 		panic("Failed to encode json data for package request")
 	}
+
+	go func() {
+		// Wait for a leader message after the data sync
+		log.Printf("Waiting up to %dms for a leader message\n", LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
+		select {
+		case <-m.leaderTimer.C:
+			// Timer fired, so no leader received. Something went wrong, so initiate
+			// a new election
+			log.Println("No leader responses received")
+			m.InitiateElection()
+		case <-m.leaderTimerChan:
+			// Received a leader message. The message is handled by the leader
+			// message handler, so return
+			return
+		}
+	}()
 }
 
 // -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
