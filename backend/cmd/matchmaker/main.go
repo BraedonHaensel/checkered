@@ -174,6 +174,8 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 		// Handle errors from redirecting client requests to the leader
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
+			matchmaker.AcceptingClientRequestsMu.TryRLock()
+			matchmaker.AcceptingClientRequestsMu.RUnlock()
 			matchmaker.InitiateElection()
 			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
