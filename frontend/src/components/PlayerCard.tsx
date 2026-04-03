@@ -44,7 +44,7 @@ export const PlayerCard = ({
                               : ''}
                     </i>
                 </p>
-                <div className="flex h-full w-full items-center gap-3 overflow-x-auto px-1">
+                <div className="scrollbar-thumb-gray-500 scrollbar-thin scrollbar-track-transparent flex h-full w-full items-center gap-3 overflow-x-auto px-1 pb-1">
                     {new Array(captured).fill(0).map((i) => (
                         <div key={i}>
                             <div
