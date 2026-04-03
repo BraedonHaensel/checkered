@@ -299,10 +299,10 @@ const Game = ({
     const lost = 12 - pieceCount(gameState.tileStates, gameState.playerColor)
 
     return (
-        <div className="grid h-lvh grid-rows-[min-content_1fr] gap-5 px-5 pt-5">
-            <h1 className="text-center">CHECKERED</h1>
-            <div className="grid grid-cols-1 grid-rows-[auto-min_content] gap-5 pb-5 md:grid-cols-[3fr_2fr] md:grid-rows-1 lg:grid-cols-[2fr_1fr]">
-                <div className="grid grid-rows-[min-content_minmax(300px,3fr)_min-content] gap-5">
+        <div className="grid h-lvh grid-rows-[min-content_1fr] gap-3 px-5 pt-5 md:gap-5">
+            <h1 className="text-center text-5xl md:text-6xl">CHECKERED</h1>
+            <div className="grid grid-cols-1 grid-rows-[auto-min_content] gap-3 pb-5 md:min-h-130 md:grid-cols-[3fr_2fr] md:grid-rows-1 md:gap-5 lg:grid-cols-[2fr_1fr]">
+                <div className="grid min-h-120 grid-rows-[min-content_3fr_min-content] gap-3 md:min-h-full md:gap-5">
                     <PlayerCard
                         player={gameState.opponent}
                         color={opponentColor}

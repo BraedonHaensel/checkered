@@ -33,7 +33,7 @@ export const PlayerCard = ({
                     showSelectableHighlight={false}
                 />
             </div>
-            <div className="grid min-h-19 w-full grid-rows-2 items-center">
+            <div className="grid min-h-16 w-full grid-rows-2 items-center md:min-h-19">
                 <p>
                     <b>{player}</b>&nbsp;
                     <i>
