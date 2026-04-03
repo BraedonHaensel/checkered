@@ -29,7 +29,10 @@ Create a `.vscode/settings.json` file with the following configuration:
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "file",
     "files.insertFinalNewline": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.associations": {
+        "*.css": "tailwindcss"
+    }
 }
 ```
 
