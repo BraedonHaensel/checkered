@@ -33,7 +33,7 @@ export const PlayerCard = ({
                     showSelectableHighlight={false}
                 />
             </div>
-            <div className="grid min-h-19 w-full grid-rows-2 items-center">
+            <div className="grid min-h-16 w-full grid-rows-2 items-center md:min-h-19">
                 <p>
                     <b>{player}</b>&nbsp;
                     <i>
@@ -44,7 +44,7 @@ export const PlayerCard = ({
                               : ''}
                     </i>
                 </p>
-                <div className="flex h-full w-full items-center gap-3 overflow-x-auto px-1">
+                <div className="scrollbar-thumb-gray-500 scrollbar-thin scrollbar-track-transparent flex h-full w-full items-center gap-3 overflow-x-auto px-1 pb-1">
                     {new Array(captured).fill(0).map((i) => (
                         <div key={i}>
                             <div

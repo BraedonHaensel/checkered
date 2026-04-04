@@ -25,6 +25,7 @@ import {
     HomeButton,
     SearchButton,
 } from '../components/Buttons'
+import MaxSquare from '../components/MaxSquare'
 
 const DEFAULT_GAME_STATE: GameState = {
     tileStates: getNewBoardTileStates(),
@@ -298,10 +299,10 @@ const Game = ({
     const lost = 12 - pieceCount(gameState.tileStates, gameState.playerColor)
 
     return (
-        <div className="grid h-lvh grid-rows-[min-content_1fr] gap-5 p-5 lg:min-h-180">
-            <h1 className="text-center">CHECKERED</h1>
-            <div className="grid grid-cols-1 grid-rows-[auto-min_content] gap-5 md:grid-cols-[3fr_2fr] md:grid-rows-1 lg:grid-cols-[2fr_1fr]">
-                <div className="grid grid-rows-[min-content_3fr_min-content] gap-5">
+        <div className="grid h-lvh grid-rows-[min-content_1fr] gap-3 px-5 pt-5 md:gap-5">
+            <h1 className="text-center text-5xl md:text-6xl">CHECKERED</h1>
+            <div className="grid grid-cols-1 grid-rows-[500px_auto] gap-3 pb-5 md:min-h-130 md:grid-cols-[3fr_2fr] md:grid-rows-1 md:gap-5 lg:grid-cols-[2fr_1fr]">
+                <div className="grid grid-rows-[min-content_3fr_min-content] gap-3 md:min-h-full md:gap-5">
                     <PlayerCard
                         player={gameState.opponent}
                         color={opponentColor}
@@ -312,12 +313,12 @@ const Game = ({
                             !gameState.isYourTurn
                         }
                     />
-                    <div className="m-auto flex aspect-square max-h-90 w-full justify-center md:max-h-full md:max-w-full lg:aspect-auto lg:h-full">
+                    <MaxSquare>
                         <GameBoard
                             gameState={gameState}
                             onPieceMove={handlePieceMove}
                         />
-                    </div>
+                    </MaxSquare>
                     <PlayerCard
                         player={username}
                         color={gameState.playerColor}

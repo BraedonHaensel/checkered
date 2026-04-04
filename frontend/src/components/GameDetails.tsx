@@ -1,9 +1,6 @@
 import { LoaderCircle } from 'lucide-react'
 import type { PreviousMove } from '../game-state'
-import {
-    isJumpMove,
-    tileIndexToCoordinate,
-} from '../game-utils'
+import { isJumpMove, tileIndexToCoordinate } from '../game-utils'
 import type { ReactNode } from 'react'
 
 type Props = {
@@ -52,17 +49,22 @@ export const GameDetails = ({
     }
 
     return (
-        <div className="h-full w-full">
+        <div className="h-full max-h-100 w-full md:max-h-full">
             <div className="grid h-full w-full grid-rows-[1fr_min-content] rounded-lg bg-neutral-900">
-                <div className="flex h-full flex-col gap-5 p-2">
+                <div className="flex h-full min-h-0 flex-col gap-5 p-2">
                     <h2 className="w-full text-center text-xl">
                         {statusMessage}
                     </h2>
                     <hr />
-                    <div className="flex h-full max-h-[70vh] min-h-0 w-full grow flex-col items-center overflow-auto">
-                        {isSearching ? (
-                            <LoaderCircle className="my-auto h-18 w-18 animate-spin" />
-                        ) : (
+                    {isSearching ? (
+                        <div className="m-auto">
+                            <LoaderCircle
+                                size={60}
+                                className="m-auto animate-spin"
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex w-full flex-col items-center overflow-y-auto">
                             <div className="grid w-full grid-cols-2 items-center">
                                 {moves && (
                                     <>
@@ -79,8 +81,8 @@ export const GameDetails = ({
                                     </span>
                                 ))}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
                 <div className="flex flex-row flex-wrap justify-between gap-2 p-2">
                     {children}
