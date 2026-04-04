@@ -1,3 +1,7 @@
+# Frontend Development
+
+This document describes the recommended setup for frontend development in [Visual Studio Code](https://code.visualstudio.com/).
+
 ## Recommended Extensions
 
 ESLint
@@ -25,7 +29,10 @@ Create a `.vscode/settings.json` file with the following configuration:
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "file",
     "files.insertFinalNewline": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.associations": {
+        "*.css": "tailwindcss"
+    }
 }
 ```
 
