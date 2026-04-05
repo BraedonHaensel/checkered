@@ -620,7 +620,7 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 
 	// No longer the leader, shut down all heartbeat goroutines
 	if !m.IsLeader() {
-		m.stopAllHeartbeatWatchers() // ← here
+		m.stopAllHeartbeatWatchers()
 	}
 
 	m.runningInElectionMu.Lock()
@@ -997,7 +997,7 @@ func (m *Matchmaker) startHeartbeatWatcher(username string) {
 }
 
 // This method is called when a player is matched, leaves or times out
-// Used to remove player from the queue and get rid of the go routine used to ensure they're still alive
+// Used to get rid of the go routine that kept a timer on the player that was removed from the queue
 func (m *Matchmaker) stopHeartbeatWatcher(username string) {
 	m.queueHeartbeatsMu.Lock()
 	defer m.queueHeartbeatsMu.Unlock()
