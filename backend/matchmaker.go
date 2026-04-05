@@ -17,6 +17,7 @@ import (
 
 const LEADER_ELECTION_TIMEOUT_SEC = 10 * time.Second
 const LEADER_ELECTION_BULLY_TIMEOUT_SEC = 3 * time.Second
+const QUEUE_HEARTBEAT_TIMEOUT = 5 * time.Second
 
 // Responsible for handling the queue for new players finding a game, as well as
 // maintaining the leaderboard and handling all leaderboard requests
@@ -28,12 +29,14 @@ type Matchmaker struct {
 	syncVersionMu sync.Mutex
 
 	// games that new clients are in
-	matches       map[uuid.UUID]*Match
-	matchesMu     sync.Mutex
-	queue         Queue[string]
-	queueMu       sync.Mutex
-	leaderboard   *Leaderboard
-	leaderboardMu sync.Mutex
+	matches           map[uuid.UUID]*Match
+	matchesMu         sync.Mutex
+	queue             Queue[string]
+	queueMu           sync.Mutex
+	queueHeartbeats   map[string]chan struct{}
+	queueHeartbeatsMu sync.Mutex
+	leaderboard       *Leaderboard
+	leaderboardMu     sync.Mutex
 
 	// Fully qualified URL of this Matchmaker
 	URL string
@@ -82,8 +85,9 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[string]{}
 	InitQueue(&queue, 100)
 	matchmaker := Matchmaker{
-		matches: make(map[uuid.UUID]*Match),
-		queue:   queue,
+		matches:         make(map[uuid.UUID]*Match),
+		queue:           queue,
+		queueHeartbeats: make(map[string]chan struct{}),
 		leaderboard: &Leaderboard{
 			Board: make([]LeaderboardEntry, 0),
 		},
@@ -378,6 +382,16 @@ func (m *Matchmaker) SynchronizeDataAndSendLeaderMessages() {
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 	}
 
+	// Starting all heartbeat watcher go routines to detect unresponsive clients in queue as only the leader needs to have this
+	m.queue.forEach(func(username string, i int) {
+		m.queueHeartbeatsMu.Lock()
+		_, alreadyWatching := m.queueHeartbeats[username]
+		m.queueHeartbeatsMu.Unlock()
+		if !alreadyWatching {
+			m.startHeartbeatWatcher(username)
+		}
+	})
+
 	// Election complete, resume handling client requests
 	m.ResumeClientRequests()
 }
@@ -604,6 +618,11 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	m.Leader = otherMatchmaker
 	m.leaderIDMu.Unlock()
 
+	// No longer the leader, shut down all heartbeat goroutines
+	if !m.IsLeader() {
+		m.stopAllHeartbeatWatchers()
+	}
+
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
 	m.runningInElectionMu.Unlock()
@@ -742,11 +761,19 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	m.queue.enqueue(username)
 	log.Printf("Added \"%s\" to queue", username)
 
+	// Start heartbeat watcher for this player
+	m.startHeartbeatWatcher(username)
+
 	// Matchmaking logic
 	if m.queue.Size >= 2 {
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
 		m.queueMu.Unlock()
+
+		// Stop heartbeat watchers for matched players
+		m.stopHeartbeatWatcher(redPlayer)
+		m.stopHeartbeatWatcher(blackPlayer)
+
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to create match: %v", err)
@@ -801,6 +828,16 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	// Reading the data in the request
 	username := r.URL.Query().Get("username")
 	m.matchesMu.Lock()
+
+	// Reset heartbeat timer if player is in queue
+	m.queueHeartbeatsMu.Lock()
+	if ch, exists := m.queueHeartbeats[username]; exists {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	m.queueHeartbeatsMu.Unlock()
 
 	// Check if the user is in a match
 	for matchID, match := range m.matches {
@@ -882,6 +919,10 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_NOT_IN_QUEUE"})
 		return
 	}
+
+	// Stopping and removing heartbeat watcher as well
+	m.stopHeartbeatWatcher(username)
+
 	m.queueMu.Lock()
 	RemoveStringValue(&m.queue, username)
 	m.queueMu.Unlock()
@@ -894,6 +935,86 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
+}
+
+// Creating player go routine, it waits for either a reset signal or a timeout
+func (m *Matchmaker) startHeartbeatWatcher(username string) {
+
+	// Creating a buffered channel that can hold only 1 singal
+	resetCh := make(chan struct{}, 1)
+
+	// Inserting the channel into the heartbeats map. Of course we lock the map first
+	m.queueHeartbeatsMu.Lock()
+	m.queueHeartbeats[username] = resetCh
+	m.queueHeartbeatsMu.Unlock()
+
+	go func() {
+		timer := time.NewTimer(QUEUE_HEARTBEAT_TIMEOUT)
+		defer timer.Stop()
+		for {
+			select {
+			case _, open := <-resetCh:
+				if !open {
+					// Channel closed meaning player was matched or left queue cleanly
+					return
+				}
+				// Reset signal received meaning the client polled so restart the timer
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(QUEUE_HEARTBEAT_TIMEOUT)
+
+			case <-timer.C:
+				// Check if watcher was already stopped before doing anything
+				m.queueHeartbeatsMu.Lock()
+				_, stillActive := m.queueHeartbeats[username]
+				m.queueHeartbeatsMu.Unlock()
+
+				if !stillActive {
+					return
+				}
+
+				// Safe to remove
+				// Timer fired meaning client hasn't polled in time and we should remove them
+				log.Printf("Player \"%s\" heartbeat timed out, removing from queue", username)
+				m.stopHeartbeatWatcher(username)
+				m.queueMu.Lock()
+				RemoveStringValue(&m.queue, username)
+				m.queueMu.Unlock()
+
+				// Boroadcast the update
+				m.IncrementSyncVersion()
+				m.broadcastQueueUpdate()
+
+				return
+			}
+		}
+	}()
+}
+
+// This method is called when a player is matched, leaves or times out
+// Used to get rid of the go routine that kept a timer on the player that was removed from the queue
+func (m *Matchmaker) stopHeartbeatWatcher(username string) {
+	m.queueHeartbeatsMu.Lock()
+	defer m.queueHeartbeatsMu.Unlock()
+	if ch, exists := m.queueHeartbeats[username]; exists {
+		close(ch)
+		delete(m.queueHeartbeats, username)
+	}
+}
+
+// Stops all hearbeat watchers, mainly just to ensure the previous leader after losing an election stops all go routines keeping tabs of clients in queue
+func (m *Matchmaker) stopAllHeartbeatWatchers() {
+	m.queueHeartbeatsMu.Lock()
+	defer m.queueHeartbeatsMu.Unlock()
+	for username, ch := range m.queueHeartbeats {
+		close(ch)
+		delete(m.queueHeartbeats, username)
+	}
+	log.Println("Stopped all heartbeat watchers (lost election)")
 }
 
 // Checks the health of a server. Returns true if healthy, false otherwise
