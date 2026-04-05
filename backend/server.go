@@ -30,7 +30,7 @@ type GameServer struct {
 	clients map[string]*Client
 	// games that new clients are in
 	games      map[uuid.UUID]*Game
-	gamesLock  sync.Mutex
+	gamesMu    sync.Mutex
 	readyQueue Queue[*Client]
 
 	register     chan *Client
@@ -63,6 +63,9 @@ type TakeOverRequest struct {
 	GameID uuid.UUID
 }
 
+/*
+Handles requests for this server to take ownership of a game
+*/
 func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 	req, err, status := parseJsonRequestData[TakeOverRequest](r)
 	if err != nil {
@@ -74,8 +77,8 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 	server.syncGames()
 	log.Printf("Games Synced")
 	// Find the game (should have it if any server has it)
-	server.gamesLock.Lock()
-	defer server.gamesLock.Unlock()
+	server.gamesMu.Lock()
+	defer server.gamesMu.Unlock()
 	game, exists := server.games[req.GameID]
 	if !exists {
 		log.Printf("Unable to locate game %s", req.GameID)
@@ -89,6 +92,9 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
+/*
+Handle requests to update game state
+*/
 func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received broadcast")
 	gameSnapshot, err, _ := parseJsonRequestData[GameSnapshot](r)
@@ -103,26 +109,31 @@ func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.R
 	w.WriteHeader(202)
 }
 
-func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
+/*
+Apply an update
+Args:
 
+	gameSnapshot (GameSnapshot) The snapshot of the update to apply
+*/
+func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
 	gameId := uuid.MustParse(gameSnapshot.GameID)
-	server.gamesLock.Lock()
+	server.gamesMu.Lock()
 	game, exists := server.games[gameId]
-	server.gamesLock.Unlock()
+	server.gamesMu.Unlock()
 	if !exists {
 		game = server.makeGame(
 			gameId,
 			gameSnapshot.RedPlayerUsername,
 			gameSnapshot.BlackPlayerUsername,
 		)
-		log.Printf("Created game %s", gameId)
+		log.Printf("Created game %s as it was previously unknown", gameId)
 	}
 	if gameSnapshot.Delete {
 		delete(server.games, gameId)
 		log.Printf("Removed game %s", gameId)
 	} else {
 		game.ApplySnapshot(gameSnapshot)
-		log.Printf("Updated game %s", gameId)
+		log.Printf("Received updated for game %s", gameId)
 	}
 }
 
@@ -130,6 +141,9 @@ type GameSnapshots struct {
 	Snapshots []GameSnapshot `json:"snapshots"`
 }
 
+/*
+Get a snapshot of all the games this server has knowledge of
+*/
 func (server *GameServer) GetSnapshots(w http.ResponseWriter, r *http.Request) {
 	ownedGames := make([]GameSnapshot, 0)
 	for _, game := range server.games {
@@ -144,6 +158,9 @@ func (server *GameServer) GetSnapshots(w http.ResponseWriter, r *http.Request) {
 	w.Write(ownedGamesBytes)
 }
 
+/*
+Broadcast a snapshot of a game to all over known servers
+*/
 func (server *GameServer) broadcastGameState(message GameSnapshot) error {
 	// Marshal the message
 	log.Printf("Broadcasting snapshot for game: %s", message.GameID)
@@ -158,8 +175,9 @@ func (server *GameServer) broadcastGameState(message GameSnapshot) error {
 		log.Printf("Sending request to: %s", url)
 		ack, err := http.Post(url, "application/json", bytes.NewBuffer(messageBytes))
 		if err != nil {
-			// TODO: If no response update the nameserver
-			return err
+			server.DeregisterGameServer(gs.ID)
+			log.Printf("Error sending update to %s: %s", url, err.Error())
+			continue
 		}
 		ack.Body.Close()
 		if ack.StatusCode != 202 {
@@ -188,13 +206,16 @@ func (server *GameServer) Register(url string) {
 	// server.syncGames()
 }
 
+/*
+Request snapshots from all other servers and apply them
+Note: After calling all games will have the most up to date snapshots applied
+*/
 func (server *GameServer) syncGames() {
 	log.Printf("Syncing Games")
 	server.RefreshOtherGameServersList()
 	server.otherGameServersMu.Lock()
 	defer server.otherGameServersMu.Unlock()
-	for i := range server.otherGameServers {
-		otherServer := server.otherGameServers[i]
+	for _, otherServer := range server.otherGameServers {
 		log.Printf("Requesting snapshots from %s", otherServer.URL)
 		res, err := http.Get(otherServer.URL + "/snapshots")
 		if err != nil {
@@ -207,8 +228,7 @@ func (server *GameServer) syncGames() {
 			continue
 		}
 		log.Printf("Applying snapshots")
-		for j := range snapshots.Snapshots {
-			snapshot := snapshots.Snapshots[j]
+		for _, snapshot := range snapshots.Snapshots {
 			log.Printf("\t%s (%d)", snapshot.GameID, snapshot.SnapshotId)
 			gameID, err := uuid.Parse(snapshot.GameID)
 			if err != nil {
@@ -342,7 +362,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 	// Find the game the user is attached to
 	var pendingGame *Game = nil
 	var opponent *Client = nil
-	server.gamesLock.Lock()
+	server.gamesMu.Lock()
 	for _, pg := range server.games {
 		if pg.blackPlayerUsername == client.username {
 			pendingGame = pg
@@ -361,7 +381,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	server.gamesLock.Unlock()
+	server.gamesMu.Unlock()
 	if pendingGame == nil {
 		log.Printf("Player %s is not in a pending game\n", client.username)
 		return
@@ -376,8 +396,8 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 		matchID := pendingGame.gameID
 
 		time.AfterFunc(5*time.Second, func() {
-			server.gamesLock.Lock()
-			defer server.gamesLock.Unlock()
+			server.gamesMu.Lock()
+			defer server.gamesMu.Unlock()
 			game, exists := server.games[matchID]
 			if exists {
 				opponentUsername := game.blackPlayerUsername
@@ -385,7 +405,7 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 				color := "red"
 				if opponentUsername == client.username {
 					opponentUsername = game.redPlayerUsername
-					opponentClient = game.blackPlayer
+					opponentClient = game.redPlayer
 					color = "black"
 				}
 				if opponentClient == nil {
@@ -449,9 +469,9 @@ func (server *GameServer) makeGame(gameID uuid.UUID, redPlayer string, blackPlay
 			server.broadcastGameState(g.CreateSnapshot(false))
 		},
 	}
-	server.gamesLock.Lock()
+	server.gamesMu.Lock()
 	server.games[gameID] = &pendingGame
-	server.gamesLock.Unlock()
+	server.gamesMu.Unlock()
 	return &pendingGame
 }
 
@@ -473,8 +493,8 @@ func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *GameServer) StartGame(gameID uuid.UUID) {
-	server.gamesLock.Lock()
-	defer server.gamesLock.Unlock()
+	server.gamesMu.Lock()
+	defer server.gamesMu.Unlock()
 	game := server.games[gameID]
 	if game.gameServer != server.ID {
 		panic("Attempted to start game by non-owning server")
@@ -531,16 +551,14 @@ func (server *GameServer) ServerLoop() {
 	for {
 		select {
 		case <-server.register:
-
-		case <-server.unregister:
-			log.Println("Attempted unregister")
-			// TODO: remove client from game rooms
+		case client := <-server.unregister:
+			log.Printf("Deregistered %s", client.username)
 		case gameResult := <-server.gameResults:
 			log.Printf(
 				"Handling game result (game=%s)",
 				gameResult.GameID,
 			)
-			server.gamesLock.Lock()
+			server.gamesMu.Lock()
 			game, exists := server.games[gameResult.GameID]
 
 			if exists {
@@ -551,7 +569,7 @@ func (server *GameServer) ServerLoop() {
 			} else {
 				log.Printf("Game %s does not exist\n", gameResult.GameID)
 			}
-			server.gamesLock.Unlock()
+			server.gamesMu.Unlock()
 		}
 	}
 }
@@ -606,4 +624,20 @@ func (server *GameServer) informMatchmakerGameEnded(gameResult GameResult) {
 	if err != nil {
 		log.Printf("Failed to send end game %s", err)
 	}
+}
+
+// Deregisters a Game Server from the Name Server.
+func (server *GameServer) DeregisterGameServer(gameServerID int) {
+	// Create the deregistration request
+	log.Println("Deregistering Game Server", gameServerID)
+	body := fmt.Appendf(nil, `{"id": %d}`, gameServerID)
+	res, err := http.Post(
+		server.nameServerURL+"/deregister/game-server",
+		"application/json",
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		log.Printf("Failed to deregister Game Server %d: %v", gameServerID, err)
+	}
+	defer res.Body.Close()
 }

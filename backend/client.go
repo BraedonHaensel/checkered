@@ -120,7 +120,6 @@ func (c *Client) writeThread() {
 }
 
 func (c *Client) readThread() {
-	// TODO: add logic for when a user sends a message back to the client
 	defer c.conn.Close()
 	defer c.handleDisconnect()
 	for {
@@ -223,7 +222,6 @@ type EnqueueRequest struct {
 
 // Handle performing a checkers piece move.
 func (c *Client) handleNewMove(p GameMove) {
-	// TODO: send game move to cluster and wait for acks
 	c.currentGame.mu.Lock()
 	defer c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)

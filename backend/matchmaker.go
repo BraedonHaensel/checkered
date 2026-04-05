@@ -727,9 +727,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			alreadyQueued = true
 		}
 	})
-	m.queueMu.Unlock()
 
 	if alreadyQueued {
+		m.queueMu.Unlock()
 		log.Printf("Player \"%s\" already in queue", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -739,7 +739,6 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	// Enqueue the user
 	log.Printf("Adding \"%s\" to queue", username)
-	m.queueMu.Lock()
 	m.queue.enqueue(username)
 	log.Printf("Added \"%s\" to queue", username)
 
