@@ -203,7 +203,7 @@ func (server *GameServer) Register(url string) {
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
 	// Get current snapshots
-	// server.syncGames()
+	server.syncGames()
 }
 
 /*
