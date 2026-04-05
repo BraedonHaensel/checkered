@@ -70,6 +70,9 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Taking over game: %s", req.GameID)
+	// Get updated snapshots to make sure this server has the game
+	server.getSnapshots()
+	// Find the game (should have it)
 	server.gamesLock.Lock()
 	defer server.gamesLock.Unlock()
 	game, exists := server.games[req.GameID]
@@ -78,6 +81,7 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Game not found"))
 		return
 	}
+	// Set this server as the owning server
 	game.gameServer = server.ID
 	server.broadcastGameState(game.CreateSnapshot(false))
 	w.WriteHeader(200)
@@ -182,6 +186,10 @@ func (server *GameServer) Register(url string) {
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
 	// Get current snapshots
+	server.getSnapshots()
+}
+
+func (server *GameServer) getSnapshots() {
 	server.RefreshOtherGameServersList()
 	for i := range server.otherGameServers {
 		otherServer := server.otherGameServers[i]
