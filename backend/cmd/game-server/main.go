@@ -41,7 +41,8 @@ func main() {
 	http.HandleFunc("POST /newGame", server.CreateGame)
 	http.HandleFunc("POST /internal", server.HandleGameStateUpdate)
 	http.HandleFunc("POST /takeover", server.TakeOverGame)
-	http.HandleFunc("GET /snapshots", server.GetOwnedSnapshots)
+	http.HandleFunc("GET /snapshots", server.GetSnapshots)
+	// http.HandleFunc("GET /snapshot/{gameID}", server.GetSnapshot)
 
 	// Endpoint to check the health of the Game Server
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

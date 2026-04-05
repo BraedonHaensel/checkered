@@ -28,8 +28,7 @@ type Client struct {
 	register func(*Client)
 	enqueued bool
 
-	unregister   chan *Client
-	moveCallback func(*Game)
+	unregister chan *Client
 }
 
 type ClientMessage struct {
@@ -228,7 +227,6 @@ func (c *Client) handleNewMove(p GameMove) {
 	c.currentGame.mu.Lock()
 	defer c.currentGame.mu.Unlock()
 	validMove := c.currentGame.playMove(p)
-	c.moveCallback(c.currentGame)
 
 	newState := GameStateUpdate{
 		Kind:          "update_state",
@@ -240,6 +238,7 @@ func (c *Client) handleNewMove(p GameMove) {
 	if c.currentGame.turn == Black {
 		newState.Turn = "black"
 	}
+	c.currentGame.RegisterUpdate()
 
 	gameStateBytes, err := json.Marshal(newState)
 	if err != nil {
@@ -263,18 +262,17 @@ func otherPlayer(username string, game *Game) *Client {
 	return game.blackPlayer
 }
 
-func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client), moveCallback func(*Game)) Client {
+func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client)) Client {
 	c := Client{
 		// TODO: figure out how to handle new usernames
-		username:     username,
-		conn:         connection,
-		status:       IDLE,
-		currentGame:  nil,
-		send:         make(chan []byte),
-		register:     register,
-		enqueued:     false,
-		unregister:   unregister,
-		moveCallback: moveCallback,
+		username:    username,
+		conn:        connection,
+		status:      IDLE,
+		currentGame: nil,
+		send:        make(chan []byte),
+		register:    register,
+		enqueued:    false,
+		unregister:  unregister,
 	}
 	return c
 }

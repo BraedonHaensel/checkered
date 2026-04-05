@@ -71,12 +71,14 @@ func (server *GameServer) TakeOverGame(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Taking over game: %s", req.GameID)
 	// Get updated snapshots to make sure this server has the game
-	server.getSnapshots()
-	// Find the game (should have it)
+	server.syncGames()
+	log.Printf("Games Synced")
+	// Find the game (should have it if any server has it)
 	server.gamesLock.Lock()
 	defer server.gamesLock.Unlock()
 	game, exists := server.games[req.GameID]
 	if !exists {
+		log.Printf("Unable to locate game %s", req.GameID)
 		w.WriteHeader(404)
 		w.Write([]byte("Game not found"))
 		return
@@ -103,17 +105,16 @@ func (server *GameServer) HandleGameStateUpdate(w http.ResponseWriter, r *http.R
 
 func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
 
-	server.gamesLock.Lock()
-	defer server.gamesLock.Unlock()
 	gameId := uuid.MustParse(gameSnapshot.GameID)
+	server.gamesLock.Lock()
 	game, exists := server.games[gameId]
+	server.gamesLock.Unlock()
 	if !exists {
-		gameRoom := Game{
-			resultChan: server.gameResults,
-			mu:         sync.Mutex{},
-		}
-		game = &gameRoom
-		server.games[gameId] = game
+		game = server.makeGame(
+			gameId,
+			gameSnapshot.RedPlayerUsername,
+			gameSnapshot.BlackPlayerUsername,
+		)
 		log.Printf("Created game %s", gameId)
 	}
 	if gameSnapshot.Delete {
@@ -126,15 +127,13 @@ func (server *GameServer) applyUpdate(gameSnapshot GameSnapshot) {
 }
 
 type GameSnapshots struct {
-	Snapshots []GameSnapshot
+	Snapshots []GameSnapshot `json:"snapshots"`
 }
 
-func (server *GameServer) GetOwnedSnapshots(w http.ResponseWriter, r *http.Request) {
+func (server *GameServer) GetSnapshots(w http.ResponseWriter, r *http.Request) {
 	ownedGames := make([]GameSnapshot, 0)
 	for _, game := range server.games {
-		if game.gameServer == server.ID {
-			ownedGames = append(ownedGames, game.CreateSnapshot(false))
-		}
+		ownedGames = append(ownedGames, game.CreateSnapshot(false))
 	}
 	ownedGamesBytes, err := json.Marshal(GameSnapshots{Snapshots: ownedGames})
 	if err != nil {
@@ -186,13 +185,17 @@ func (server *GameServer) Register(url string) {
 	log.Println("Registered with ID:", server.ID)
 	log.SetPrefix(fmt.Sprintf("[%d] ", server.ID))
 	// Get current snapshots
-	server.getSnapshots()
+	// server.syncGames()
 }
 
-func (server *GameServer) getSnapshots() {
+func (server *GameServer) syncGames() {
+	log.Printf("Syncing Games")
 	server.RefreshOtherGameServersList()
+	server.otherGameServersMu.Lock()
+	defer server.otherGameServersMu.Unlock()
 	for i := range server.otherGameServers {
 		otherServer := server.otherGameServers[i]
+		log.Printf("Requesting snapshots from %s", otherServer.URL)
 		res, err := http.Get(otherServer.URL + "/snapshots")
 		if err != nil {
 			log.Println(err)
@@ -203,8 +206,27 @@ func (server *GameServer) getSnapshots() {
 			log.Println(err)
 			continue
 		}
+		log.Printf("Applying snapshots")
 		for j := range snapshots.Snapshots {
-			server.applyUpdate(snapshots.Snapshots[j])
+			snapshot := snapshots.Snapshots[j]
+			log.Printf("\t%s (%d)", snapshot.GameID, snapshot.SnapshotId)
+			gameID, err := uuid.Parse(snapshot.GameID)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			game, exists := server.games[gameID]
+			log.Printf("Game %s exists? %t", gameID, exists)
+			if !exists || (game.snapshotId < snapshot.SnapshotId) {
+				log.Printf("Applying snapshot %d for game %s", snapshot.SnapshotId, gameID)
+				server.applyUpdate(snapshot)
+			} else if snapshot.SnapshotId < game.snapshotId {
+				log.Printf(
+					"Received out of date snapshot %d, expected %d+",
+					snapshot.SnapshotId,
+					game.snapshotId,
+				)
+			}
 		}
 	}
 }
@@ -302,9 +324,6 @@ func ServeWs(server *GameServer, w http.ResponseWriter, r *http.Request) {
 		server.unregister,
 		func(client *Client) {
 			server.register <- client
-		},
-		func(g *Game) {
-			server.broadcastGameState(g.CreateSnapshot(false))
 		},
 	)
 	server.clients[client.username] = &client
@@ -412,6 +431,30 @@ func (server *GameServer) HandlePlayerDisconnect(matchID uuid.UUID, client Clien
 	server.informMatchmakerGameEnded(gameResult)
 }
 
+func (server *GameServer) makeGame(gameID uuid.UUID, redPlayer string, blackPlayer string) *Game {
+	pendingGame := Game{
+		gameID:              gameID,
+		gameServer:          server.ID,
+		redPlayer:           nil,
+		blackPlayer:         nil,
+		redPlayerUsername:   redPlayer,
+		blackPlayerUsername: blackPlayer,
+		tileStates:          generateInitialTileStates(),
+		turn:                Red,
+		previousMoves:       make([]GameMove, 0),
+		resultChan:          server.gameResults,
+		mu:                  sync.Mutex{},
+		snapshotId:          0,
+		updateCallback: func(g *Game) {
+			server.broadcastGameState(g.CreateSnapshot(false))
+		},
+	}
+	server.gamesLock.Lock()
+	server.games[gameID] = &pendingGame
+	server.gamesLock.Unlock()
+	return &pendingGame
+}
+
 func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
 	match, err, status := parseJsonRequestData[Match](r)
 	if err != nil {
@@ -419,27 +462,13 @@ func (server *GameServer) CreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uuid := match.MatchID
-	pendingGame := Game{
-		gameID:              uuid,
-		gameServer:          server.ID,
-		redPlayer:           nil,
-		blackPlayer:         nil,
-		redPlayerUsername:   match.RedPlayer,
-		blackPlayerUsername: match.BlackPlayer,
-		tileStates:          generateInitialTileStates(),
-		turn:                Red,
-		previousMoves:       make([]GameMove, 0),
-		resultChan:          server.gameResults,
-		mu:                  sync.Mutex{},
-	}
-	server.gamesLock.Lock()
-	defer server.gamesLock.Unlock()
-	server.games[uuid] = &pendingGame
+	pendingGame := server.makeGame(uuid, match.RedPlayer, match.BlackPlayer)
 	err = server.broadcastGameState(pendingGame.CreateSnapshot(false))
 	if err != nil {
 		log.Printf("Failed to broadcast game creation: %s", err)
 	}
 	log.Printf("Created pending game: %s", uuid)
+	w.WriteHeader(202)
 
 }
 

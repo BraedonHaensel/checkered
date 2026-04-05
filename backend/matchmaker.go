@@ -738,14 +738,13 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue the user
+	log.Printf("Adding \"%s\" to queue", username)
 	m.queueMu.Lock()
 	m.queue.enqueue(username)
-	m.queueMu.Unlock()
-	log.Printf("Adding \"%s\" to queue", username)
+	log.Printf("Added \"%s\" to queue", username)
 
 	// Matchmaking logic
 	if m.queue.Size >= 2 {
-		m.queueMu.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
 		m.queueMu.Unlock()
@@ -756,9 +755,6 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
-		m.matchesMu.Lock()
-		m.matches[match.MatchID] = &match
-		m.matchesMu.Unlock()
 
 		// Marshal the match to JSON
 		matchBytes, err := json.Marshal(&match)
@@ -769,10 +765,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		m.IncrementSyncVersion()
-		m.broadcastMatchesUpdate()
-
 		// Send a POST request to the game server with the match details
+		log.Printf("Sending new game request to %s", match.GameServer.URL)
 		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
@@ -780,9 +774,15 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
+		log.Printf("Game created on %s", match.GameServer.URL)
 		defer res.Body.Close()
 
+		m.matchesMu.Lock()
+		m.matches[match.MatchID] = &match
+		m.matchesMu.Unlock()
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
+	} else {
+		m.queueMu.Unlock()
 	}
 
 	m.IncrementSyncVersion()
@@ -955,52 +955,67 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 
 	// Locate a new gameserver
 	var gameServer *Server = nil
-	for {
-		// Get all available game servers
-		gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	// Get all available game servers
+	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-		if len(gameServers) == 0 {
-			log.Println("No game servers available")
-			http.Error(w, "No game servers available", http.StatusInternalServerError)
-			return
-		}
-
-		// Pick the first one
-		gameServer = &gameServers[0]
-
-		// Switch the match to the new Game Server
-		match.GameServer = *gameServer
-
-		// Marshal the match to JSON
-		matchBytes, err := json.Marshal(TakeOverRequest{
-			GameID: match.MatchID,
-		})
-		if err != nil {
-			errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
-			log.Println(errMsg)
-			http.Error(w, errMsg, http.StatusInternalServerError)
-			return
-		}
+	if len(gameServers) == 0 {
+		log.Println("No game servers available")
+		http.Error(w, "No game servers available", http.StatusInternalServerError)
+		return
+	}
+	// Marshal the match to JSON
+	matchBytes, err := json.Marshal(TakeOverRequest{
+		GameID: match.MatchID,
+	})
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	foundReplacement := false
+	unresponsiveServers := make([]Server, 0)
+	for i := range gameServers {
+		gameServer = &gameServers[i]
 
 		// Send a POST request to the game server with the match details
-		res, err := http.Post(match.GameServer.URL+"/takeover", "application/json", bytes.NewBuffer(matchBytes))
+		res, err := http.Post(gameServer.URL+"/takeover", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
-			errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
+			errMsg := fmt.Sprintf(
+				"Failed to send match to game server [%d] %s: %s",
+				gameServer.ID,
+				gameServer.URL,
+				err,
+			)
 			log.Println(errMsg)
-			m.DeregisterGameServer(match.GameServer.ID)
+			unresponsiveServers = append(unresponsiveServers, *gameServer)
 			continue
 		}
 		res.Body.Close()
 		if res.StatusCode != 200 {
 			continue
 		}
+		// Switch the match to the new Game Server
+		match.GameServer = *gameServer
 		// Broadcast the match change to the backup Matchmakers
 		m.broadcastMatchesUpdate()
+		foundReplacement = true
 		break
+	}
+	for i := range unresponsiveServers {
+		m.DeregisterGameServer(unresponsiveServers[i].ID)
+	}
+	if !foundReplacement {
+		log.Printf("Failed to find replacement server for game %s", match.MatchID)
+		// TODO Mark the game as aborted
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "FAILURE"})
+		return
 	}
 
 	m.IncrementSyncVersion()
@@ -1178,4 +1193,5 @@ func (m *Matchmaker) broadcastMatchesUpdate() {
 	log.Println("Broadcasting matches update to backups")
 	m.broadcast("/internal/matches", m.matches)
 	m.matchesMu.Unlock()
+	log.Println("Broadcast successful")
 }

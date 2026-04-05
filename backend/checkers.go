@@ -47,6 +47,8 @@ type Game struct {
 	blackWantsDraw      bool
 	redWantsDraw        bool
 	mu                  sync.Mutex
+	snapshotId          int
+	updateCallback      func(*Game)
 }
 
 type GameSnapshot struct {
@@ -60,6 +62,7 @@ type GameSnapshot struct {
 	BlackWantsDraw      bool        `json:"blackWantsDraw"`
 	RedWantsDraw        bool        `json:"redWantsDraw"`
 	Delete              bool        `json:"delete"`
+	SnapshotId          int         `json:"snapshotId"`
 }
 
 func (game *Game) CreateSnapshot(delete bool) GameSnapshot {
@@ -74,6 +77,7 @@ func (game *Game) CreateSnapshot(delete bool) GameSnapshot {
 		BlackWantsDraw:      game.blackWantsDraw,
 		RedWantsDraw:        game.redWantsDraw,
 		Delete:              delete,
+		SnapshotId:          game.snapshotId,
 	}
 }
 
@@ -89,6 +93,12 @@ func (game *Game) ApplySnapshot(snapshot GameSnapshot) {
 	game.previousMoves = snapshot.PreviousMoves
 	game.blackWantsDraw = snapshot.BlackWantsDraw
 	game.redWantsDraw = snapshot.RedWantsDraw
+	game.snapshotId = snapshot.SnapshotId
+}
+
+func (game *Game) RegisterUpdate() {
+	game.snapshotId++
+	game.updateCallback(game)
 }
 
 func generateInitialTileStates() []TileState {
