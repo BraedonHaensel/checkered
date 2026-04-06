@@ -640,6 +640,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	if data.LatestData.SyncVersion > m.syncVersion {
 		// Synchronize with the new leader's data
 		m.SetAllSyncedData(data.LatestData)
+	} else {
+		log.Println("Data already synchronized with sync version:", m.syncVersion)
 	}
 
 	// Resume Client requests
