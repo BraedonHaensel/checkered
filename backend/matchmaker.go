@@ -59,6 +59,9 @@ type Matchmaker struct {
 	// Timer and chan to wait for and detect receiving a leader response
 	leaderTimer     *time.Timer
 	leaderTimerChan chan struct{}
+	// Timer and chan to wait for and detect receiving a leader response during a data sync
+	syncLeaderTimer     *time.Timer
+	syncLeaderTimerChan chan struct{}
 
 	// Locks to pause client requests during synchronizations during a leader election
 	AcceptingClientRequestsMu sync.RWMutex // multiple request handlers acquire read locks
@@ -179,8 +182,8 @@ func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *ht
 	data := m.GetAllSyncedData()
 
 	// Start a timer to wait for a leader message
-	m.leaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
-	m.leaderTimerChan = make(chan struct{})
+	m.syncLeaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	m.syncLeaderTimerChan = make(chan struct{})
 
 	// Send this Matchmaker's data
 	err := json.NewEncoder(w).Encode(data)
@@ -192,12 +195,12 @@ func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *ht
 		// Wait for a leader message after the data sync
 		log.Printf("Waiting up to %dms for a leader message\n", LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
 		select {
-		case <-m.leaderTimer.C:
+		case <-m.syncLeaderTimer.C:
 			// Timer fired, so no leader received. Something went wrong, so initiate
 			// a new election
 			log.Println("No leader responses received")
 			m.InitiateElection()
-		case <-m.leaderTimerChan:
+		case <-m.syncLeaderTimerChan:
 			// Received a leader message. The message is handled by the leader
 			// message handler, so return
 			return
@@ -594,6 +597,13 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 			close(m.leaderTimerChan)
 		}
 	}
+	// If this server was waiting during a data sync, interrupt the leader timer so it never fires
+	if m.syncLeaderTimer != nil && m.syncLeaderTimer.Stop() {
+		if m.syncLeaderTimerChan != nil {
+			// Close the leader timer chan to notify the thread to stop waiting for the timer
+			close(m.syncLeaderTimerChan)
+		}
+	}
 
 	// Parse the Matchmaker's ID from the request
 	data, err, errStatus := parseJsonRequestData[LeaderMessage](r)
@@ -630,6 +640,8 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	if data.LatestData.SyncVersion > m.syncVersion {
 		// Synchronize with the new leader's data
 		m.SetAllSyncedData(data.LatestData)
+	} else {
+		log.Println("Data already synchronized with sync version:", m.syncVersion)
 	}
 
 	// Resume Client requests
