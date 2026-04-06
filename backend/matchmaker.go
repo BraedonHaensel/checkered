@@ -15,7 +15,9 @@ import (
 
 // -------------------- INITIAL ADMIN SET UP	 --------------------
 
-const LEADER_ELECTION_TIMEOUT_SEC = 5 * time.Second
+const LEADER_ELECTION_TIMEOUT_SEC = 10 * time.Second
+const LEADER_ELECTION_BULLY_TIMEOUT_SEC = 3 * time.Second
+const QUEUE_HEARTBEAT_TIMEOUT = 5 * time.Second
 
 // Responsible for handling the queue for new players finding a game, as well as
 // maintaining the leaderboard and handling all leaderboard requests
@@ -27,12 +29,14 @@ type Matchmaker struct {
 	syncVersionMu sync.Mutex
 
 	// games that new clients are in
-	matches       map[uuid.UUID]*Match
-	matchesMu     sync.Mutex
-	queue         Queue[string]
-	queueMu       sync.Mutex
-	leaderboard   *Leaderboard
-	leaderboardMu sync.Mutex
+	matches           map[uuid.UUID]*Match
+	matchesMu         sync.Mutex
+	queue             Queue[string]
+	queueMu           sync.Mutex
+	queueHeartbeats   map[string]chan struct{}
+	queueHeartbeatsMu sync.Mutex
+	leaderboard       *Leaderboard
+	leaderboardMu     sync.Mutex
 
 	// Fully qualified URL of this Matchmaker
 	URL string
@@ -81,8 +85,9 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[string]{}
 	InitQueue(&queue, 100)
 	matchmaker := Matchmaker{
-		matches: make(map[uuid.UUID]*Match),
-		queue:   queue,
+		matches:         make(map[uuid.UUID]*Match),
+		queue:           queue,
+		queueHeartbeats: make(map[string]chan struct{}),
 		leaderboard: &Leaderboard{
 			Board: make([]LeaderboardEntry, 0),
 		},
@@ -170,12 +175,34 @@ func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *ht
 	// message has been received
 	m.PauseClientRequests()
 
-	// Send this Matchmaker's data
+	// Get this Matchmaker's data
 	data := m.GetAllSyncedData()
+
+	// Start a timer to wait for a leader message
+	m.leaderTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	m.leaderTimerChan = make(chan struct{})
+
+	// Send this Matchmaker's data
 	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
 		panic("Failed to encode json data for package request")
 	}
+
+	go func() {
+		// Wait for a leader message after the data sync
+		log.Printf("Waiting up to %dms for a leader message\n", LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
+		select {
+		case <-m.leaderTimer.C:
+			// Timer fired, so no leader received. Something went wrong, so initiate
+			// a new election
+			log.Println("No leader responses received")
+			m.InitiateElection()
+		case <-m.leaderTimerChan:
+			// Received a leader message. The message is handled by the leader
+			// message handler, so return
+			return
+		}
+	}()
 }
 
 // -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
@@ -355,12 +382,25 @@ func (m *Matchmaker) SynchronizeDataAndSendLeaderMessages() {
 		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
 	}
 
+	// Starting all heartbeat watcher go routines to detect unresponsive clients in queue as only the leader needs to have this
+	m.queue.forEach(func(username string, i int) {
+		m.queueHeartbeatsMu.Lock()
+		_, alreadyWatching := m.queueHeartbeats[username]
+		m.queueHeartbeatsMu.Unlock()
+		if !alreadyWatching {
+			m.startHeartbeatWatcher(username)
+		}
+	})
+
 	// Election complete, resume handling client requests
 	m.ResumeClientRequests()
 }
 
 // Initiates a leader election using the Bully algorithm.
 func (m *Matchmaker) InitiateElection() {
+	// Pause client requests during the election
+	m.PauseClientRequests()
+
 	m.runningInElectionMu.Lock()
 	log.Println("Initiating a leader election")
 	m.runningInElection = true
@@ -393,7 +433,7 @@ func (m *Matchmaker) InitiateElection() {
 	}
 
 	// Start the bully response timeout before sending the election(i) messages to avoid race conditions
-	m.bullyTimer = time.NewTimer(LEADER_ELECTION_TIMEOUT_SEC)
+	m.bullyTimer = time.NewTimer(LEADER_ELECTION_BULLY_TIMEOUT_SEC)
 	// The chan is used to interrupt waiting for the timer when a bully() is received
 	m.bullyTimerChan = make(chan struct{})
 
@@ -413,7 +453,7 @@ func (m *Matchmaker) InitiateElection() {
 
 	// Wait for a bully() response
 	log.Printf("Waiting up to %dms for a bully() response\n",
-		LEADER_ELECTION_TIMEOUT_SEC.Milliseconds())
+		LEADER_ELECTION_BULLY_TIMEOUT_SEC.Milliseconds())
 
 	select {
 	case <-m.bullyTimer.C:
@@ -530,6 +570,9 @@ func (m *Matchmaker) HandleElectionRequest(w http.ResponseWriter, r *http.Reques
 	m.otherMatchmakersMu.Unlock()
 
 	if id < m.ID {
+		// Pause client requests during the election
+		m.PauseClientRequests()
+
 		// Message received from a server with a lower ID, so bully them.
 		log.Printf("Received election(%d). Bullying as this Matchmaker's ID [%d] is higher", id, m.ID)
 		m.sendBullyMessage(otherMatchmaker)
@@ -574,6 +617,11 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	log.Println("Received a new leader ID:", otherMatchmaker.ID)
 	m.Leader = otherMatchmaker
 	m.leaderIDMu.Unlock()
+
+	// No longer the leader, shut down all heartbeat goroutines
+	if !m.IsLeader() {
+		m.stopAllHeartbeatWatchers()
+	}
 
 	m.runningInElectionMu.Lock()
 	m.runningInElection = false
@@ -698,9 +746,9 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			alreadyQueued = true
 		}
 	})
-	m.queueMu.Unlock()
 
 	if alreadyQueued {
+		m.queueMu.Unlock()
 		log.Printf("Player \"%s\" already in queue", username)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -709,17 +757,23 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue the user
-	m.queueMu.Lock()
-	m.queue.enqueue(username)
-	m.queueMu.Unlock()
 	log.Printf("Adding \"%s\" to queue", username)
+	m.queue.enqueue(username)
+	log.Printf("Added \"%s\" to queue", username)
+
+	// Start heartbeat watcher for this player
+	m.startHeartbeatWatcher(username)
 
 	// Matchmaking logic
 	if m.queue.Size >= 2 {
-		m.queueMu.Lock()
 		redPlayer := m.queue.dequeue()
 		blackPlayer := m.queue.dequeue()
 		m.queueMu.Unlock()
+
+		// Stop heartbeat watchers for matched players
+		m.stopHeartbeatWatcher(redPlayer)
+		m.stopHeartbeatWatcher(blackPlayer)
+
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to create match: %v", err)
@@ -727,9 +781,6 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
-		m.matchesMu.Lock()
-		m.matches[match.MatchID] = &match
-		m.matchesMu.Unlock()
 
 		// Marshal the match to JSON
 		matchBytes, err := json.Marshal(&match)
@@ -740,10 +791,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		m.IncrementSyncVersion()
-		m.broadcastMatchesUpdate()
-
 		// Send a POST request to the game server with the match details
+		log.Printf("Sending new game request to %s", match.GameServer.URL)
 		res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
@@ -751,9 +800,15 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
+		log.Printf("Game created on %s", match.GameServer.URL)
 		defer res.Body.Close()
 
+		m.matchesMu.Lock()
+		m.matches[match.MatchID] = &match
+		m.matchesMu.Unlock()
 		log.Printf("Match created: %s (red) vs %s (black)", redPlayer, blackPlayer)
+	} else {
+		m.queueMu.Unlock()
 	}
 
 	m.IncrementSyncVersion()
@@ -773,6 +828,16 @@ func (m *Matchmaker) QueuePollRequest(w http.ResponseWriter, r *http.Request) {
 	// Reading the data in the request
 	username := r.URL.Query().Get("username")
 	m.matchesMu.Lock()
+
+	// Reset heartbeat timer if player is in queue
+	m.queueHeartbeatsMu.Lock()
+	if ch, exists := m.queueHeartbeats[username]; exists {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	m.queueHeartbeatsMu.Unlock()
 
 	// Check if the user is in a match
 	for matchID, match := range m.matches {
@@ -854,6 +919,10 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(QueueResponse{Type: "ALREADY_NOT_IN_QUEUE"})
 		return
 	}
+
+	// Stopping and removing heartbeat watcher as well
+	m.stopHeartbeatWatcher(username)
+
 	m.queueMu.Lock()
 	RemoveStringValue(&m.queue, username)
 	m.queueMu.Unlock()
@@ -866,6 +935,86 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(QueueResponse{Type: "SUCCESS"})
 
+}
+
+// Creating player go routine, it waits for either a reset signal or a timeout
+func (m *Matchmaker) startHeartbeatWatcher(username string) {
+
+	// Creating a buffered channel that can hold only 1 singal
+	resetCh := make(chan struct{}, 1)
+
+	// Inserting the channel into the heartbeats map. Of course we lock the map first
+	m.queueHeartbeatsMu.Lock()
+	m.queueHeartbeats[username] = resetCh
+	m.queueHeartbeatsMu.Unlock()
+
+	go func() {
+		timer := time.NewTimer(QUEUE_HEARTBEAT_TIMEOUT)
+		defer timer.Stop()
+		for {
+			select {
+			case _, open := <-resetCh:
+				if !open {
+					// Channel closed meaning player was matched or left queue cleanly
+					return
+				}
+				// Reset signal received meaning the client polled so restart the timer
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(QUEUE_HEARTBEAT_TIMEOUT)
+
+			case <-timer.C:
+				// Check if watcher was already stopped before doing anything
+				m.queueHeartbeatsMu.Lock()
+				_, stillActive := m.queueHeartbeats[username]
+				m.queueHeartbeatsMu.Unlock()
+
+				if !stillActive {
+					return
+				}
+
+				// Safe to remove
+				// Timer fired meaning client hasn't polled in time and we should remove them
+				log.Printf("Player \"%s\" heartbeat timed out, removing from queue", username)
+				m.stopHeartbeatWatcher(username)
+				m.queueMu.Lock()
+				RemoveStringValue(&m.queue, username)
+				m.queueMu.Unlock()
+
+				// Boroadcast the update
+				m.IncrementSyncVersion()
+				m.broadcastQueueUpdate()
+
+				return
+			}
+		}
+	}()
+}
+
+// This method is called when a player is matched, leaves or times out
+// Used to get rid of the go routine that kept a timer on the player that was removed from the queue
+func (m *Matchmaker) stopHeartbeatWatcher(username string) {
+	m.queueHeartbeatsMu.Lock()
+	defer m.queueHeartbeatsMu.Unlock()
+	if ch, exists := m.queueHeartbeats[username]; exists {
+		close(ch)
+		delete(m.queueHeartbeats, username)
+	}
+}
+
+// Stops all hearbeat watchers, mainly just to ensure the previous leader after losing an election stops all go routines keeping tabs of clients in queue
+func (m *Matchmaker) stopAllHeartbeatWatchers() {
+	m.queueHeartbeatsMu.Lock()
+	defer m.queueHeartbeatsMu.Unlock()
+	for username, ch := range m.queueHeartbeats {
+		close(ch)
+		delete(m.queueHeartbeats, username)
+	}
+	log.Println("Stopped all heartbeat watchers (lost election)")
 }
 
 // Checks the health of a server. Returns true if healthy, false otherwise
@@ -924,6 +1073,8 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	// TODO this is just a temporary fix of choosing the first server
 	log.Println("Finding a replacement Game Server for match", match.MatchID)
 
+	// Locate a new gameserver
+	var gameServer *Server = nil
 	// Get all available game servers
 	gameServers, err := SendServerListRequest(m.nameServerURL + "/game-servers")
 	if err != nil {
@@ -936,35 +1087,60 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 		http.Error(w, "No game servers available", http.StatusInternalServerError)
 		return
 	}
-
-	// Pick the first one
-	gameServer := gameServers[0]
-
-	// Switch the match to the new Game Server
-	match.GameServer = gameServer
-
-	m.IncrementSyncVersion()
-	// Broadcast the match change to the backup Matchmakers
-	m.broadcastMatchesUpdate()
-
 	// Marshal the match to JSON
-	matchBytes, err := json.Marshal(match)
+	matchBytes, err := json.Marshal(TakeOverRequest{
+		GameID: match.MatchID,
+	})
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to marshal match: %v", err)
 		log.Println(errMsg)
 		http.Error(w, errMsg, http.StatusInternalServerError)
 		return
 	}
+	foundReplacement := false
+	unresponsiveServers := make([]Server, 0)
+	for i := range gameServers {
+		gameServer = &gameServers[i]
 
-	// Send a POST request to the game server with the match details
-	res, err := http.Post(match.GameServer.URL+"/newGame", "application/json", bytes.NewBuffer(matchBytes))
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to send match to game server [%d] %s: %s", match.GameServer.ID, match.GameServer.URL, err)
-		log.Println(errMsg)
-		http.Error(w, errMsg, http.StatusInternalServerError)
+		// Send a POST request to the game server with the match details
+		res, err := http.Post(gameServer.URL+"/takeover", "application/json", bytes.NewBuffer(matchBytes))
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"Failed to send match to game server [%d] %s: %s",
+				gameServer.ID,
+				gameServer.URL,
+				err,
+			)
+			log.Println(errMsg)
+			unresponsiveServers = append(unresponsiveServers, *gameServer)
+			continue
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			continue
+		}
+		// Switch the match to the new Game Server
+		match.GameServer = *gameServer
+		// Broadcast the match change to the backup Matchmakers
+		m.broadcastMatchesUpdate()
+		foundReplacement = true
+		break
+	}
+	for i := range unresponsiveServers {
+		m.DeregisterGameServer(unresponsiveServers[i].ID)
+	}
+	if !foundReplacement {
+		log.Printf("Failed to find replacement server for game %s", match.MatchID)
+		// TODO Mark the game as aborted
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(RequestNewGameServerResponse{Type: "FAILURE"})
 		return
 	}
-	defer res.Body.Close()
+
+	m.IncrementSyncVersion()
+	// Broadcast the match change to the backup Matchmakers
+	m.broadcastMatchesUpdate()
 
 	log.Printf("Match %s moved to Game Server [%d] %s", match.MatchID, gameServer.ID, gameServer.URL)
 
@@ -984,15 +1160,19 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the leaderboard
+
+	// if isNotADraw {
+	// 	m.IncrementSyncVersion()
+	// 	// Broadcast the new leaderboard if the game did not end in a draw
+	// 	m.broadcastLeaderboardUpdate()
+	// }
+	log.Printf("Updating leaderboard (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
 	m.leaderboardMu.Lock()
-	isNotADraw := m.leaderboard.UpdateLeaderboard(data)
+	m.leaderboard.UpdateLeaderboard(data)
 	m.leaderboardMu.Unlock()
 
-	if isNotADraw {
-		m.IncrementSyncVersion()
-		// Broadcast the new leaderboard if the game did not end in a draw
-		m.broadcastLeaderboardUpdate()
-	}
+	m.IncrementSyncVersion()
+	m.broadcastLeaderboardUpdate()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -1133,4 +1313,5 @@ func (m *Matchmaker) broadcastMatchesUpdate() {
 	log.Println("Broadcasting matches update to backups")
 	m.broadcast("/internal/matches", m.matches)
 	m.matchesMu.Unlock()
+	log.Println("Broadcast successful")
 }

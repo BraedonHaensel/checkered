@@ -122,47 +122,56 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			return
 		}
 
-		isInternal := strings.Contains(r.URL.Path, "internal")
-
-		if !isInternal {
-			// Client request, wait until it is safe to proceed
-			matchmaker.AcceptingClientRequestsMu.RLock()
-			defer matchmaker.AcceptingClientRequestsMu.RUnlock()
-		}
-
-		// If this is the leader server, or an internal route, that is, a route that is
-		// destined for this server specifically (for cross-Matchmaker communication),
-		// then we handle the request locally.
-		if isInternal || matchmaker.IsLeader() {
-			log.Println("Handling request locally for endpoint:", r.URL.Path)
-
-			// Handle the internal or client request
+		if strings.Contains(r.URL.Path, "internal") {
+			// Internal request (from direct cross-Matchmaker communication).
+			// Handle the request locally
+			log.Println("Handling internal request for endpoint:", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Otherwise, we redirect the request to the leader server, using a HTTP 307, Temporary Redirect.
-		newUrl, err := url.Parse(matchmaker.Leader.URL)
+		// Client request, wait until it is safe to proceed
+		matchmaker.AcceptingClientRequestsMu.RLock()
 
-		if err != nil {
-			println("Error, could not parse leader url")
+		if matchmaker.IsLeader() {
+			// Is leader, handle the request locally
+			log.Println("Handling client request for endpoint:", r.URL.Path)
+			next.ServeHTTP(w, r)
+			matchmaker.AcceptingClientRequestsMu.RUnlock()
+			return
 		}
 
+		// Client request needs to be redirected to the leader. Release the lock
+		// as it will not be processed here.
+		matchmaker.AcceptingClientRequestsMu.RUnlock()
+
+		// Get the leader URL so we can redirect the client request to the
+		// leader server, using a HTTP 307, Temporary Redirect.
+		newUrl, err := url.Parse(matchmaker.Leader.URL)
+		if err != nil {
+			log.Println("Error, failed to parse leader url:", matchmaker.Leader.URL)
+			return
+		}
+
+		// Set up a proxy to redirect the client request to the leader
 		proxy := httputil.NewSingleHostReverseProxy(newUrl)
 
 		// Need to deep clone the request so that we do not
 		// double read if we handle locally.
 		// https://stackoverflow.com/questions/62017146/http-request-clone-is-not-deep-clone
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			// Something went really wrong. We can't clone the data for whatevery reason,
-			// assume we are out of memory and crash
-			panic("Failed to clone request body")
-		}
 		r2 := r.Clone(r.Context())
-		r2.Body = io.NopCloser(bytes.NewReader(body))
-		r.Body = io.NopCloser(bytes.NewReader(body))
+		if r.Body != nil {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				// Something went really wrong. We can't clone the data for whatevery reason,
+				// assume we are out of memory and crash
+				panic("Failed to clone request body")
+			}
+			r2.Body = io.NopCloser(bytes.NewReader(body))
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
 
+		// Handle errors from redirecting client requests to the leader
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Println("Failed to contact leader, initiating election...")
 			matchmaker.AcceptingClientRequestsMu.TryRLock()
@@ -171,6 +180,7 @@ func LeaderMiddleware(matchmaker *Checkered.Matchmaker, next http.Handler) http.
 			LeaderMiddleware(matchmaker, next).ServeHTTP(w, r)
 		}
 
+		// Redirect the client request to the leader
 		proxy.ServeHTTP(w, r2)
 	})
 }

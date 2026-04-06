@@ -120,7 +120,6 @@ func (c *Client) writeThread() {
 }
 
 func (c *Client) readThread() {
-	// TODO: add logic for when a user sends a message back to the client
 	defer c.conn.Close()
 	defer c.handleDisconnect()
 	for {
@@ -237,6 +236,7 @@ func (c *Client) handleNewMove(p GameMove) {
 	if c.currentGame.turn == Black {
 		newState.Turn = "black"
 	}
+	c.currentGame.RegisterUpdate()
 
 	gameStateBytes, err := json.Marshal(newState)
 	if err != nil {

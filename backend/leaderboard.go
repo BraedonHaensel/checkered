@@ -1,10 +1,7 @@
 package checkered
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 )
 
 type Leaderboard struct {
@@ -34,33 +31,35 @@ func (lb *Leaderboard) AddPlayerToLeaderboard(username string) {
 
 // Updates the leaderboard for a game result. Returns false if it's a draw, true otherwise
 func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
-	if result.Winner == nil || result.Loser == nil {
+	if result.IsDraw {
 		// Game ended in a draw, no leaderboard update required
 		log.Printf("Game Result: (game=%s, draw)", result.GameID)
+		lb.AddPlayerToLeaderboard(result.Winner)
+		lb.AddPlayerToLeaderboard(result.Loser)
 		return false
 	}
 
-	winner := *result.Winner
-	loser := *result.Loser
+	winner := result.Winner
+	loser := result.Loser
 	log.Printf("Game Result: (game=%s, winner=%s, loser=%s)", result.GameID, winner, loser)
 
 	// Ensure each player is in the leaderboard
-	lb.AddPlayerToLeaderboard(*result.Winner)
-	lb.AddPlayerToLeaderboard(*result.Loser)
+	lb.AddPlayerToLeaderboard(result.Winner)
+	lb.AddPlayerToLeaderboard(result.Loser)
 
 	// Update the win/loss scores for each player
 	for i := range lb.Board {
-		if lb.Board[i].Username == *result.Winner {
+		if lb.Board[i].Username == result.Winner {
 			lb.Board[i].Wins++
 			log.Printf("New score: %s = w%d/l%d\n",
-				*result.Winner,
+				result.Winner,
 				lb.Board[i].Wins,
 				lb.Board[i].Losses)
 		}
-		if lb.Board[i].Username == *result.Loser {
+		if lb.Board[i].Username == result.Loser {
 			lb.Board[i].Losses++
 			log.Printf("New score: %s = w%d/l%d\n",
-				*result.Loser,
+				result.Loser,
 				lb.Board[i].Wins,
 				lb.Board[i].Losses)
 		}
@@ -70,12 +69,12 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
 }
 
 // / return a json payload of the current leaderboard
-func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
-	err := json.NewEncoder(w).Encode(s.leaderboard)
-	if err != nil {
-		errorStr := fmt.Errorf("getLeaderboard error: %s", err)
-		log.Println(errorStr)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
+// func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
+// 	err := json.NewEncoder(w).Encode(s.leaderboard)
+// 	if err != nil {
+// 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)
+// 		fmt.Println(errorStr)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
+// }
