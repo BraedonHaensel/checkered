@@ -40,7 +40,7 @@ PIDS+=($!)
 ) &
 PIDS+=($!)
 
-sleep 2
+sleep 1
 
 # Matchmakers
 for ((i=1; i<=MATCHMAKERS; i++)); do
@@ -53,6 +53,7 @@ for ((i=1; i<=MATCHMAKERS; i++)); do
   ) &
 
   PIDS+=($!)
+  sleep 0.1
 done
 
 # Game servers
@@ -66,6 +67,7 @@ for ((i=1; i<=GAME_SERVERS; i++)); do
   ) &
 
   PIDS+=($!)
+  sleep 0.1
 done
 
 wait
