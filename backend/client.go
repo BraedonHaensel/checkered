@@ -248,7 +248,6 @@ func otherPlayer(username string, game *Game) *Client {
 
 func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client)) Client {
 	c := Client{
-		// TODO: figure out how to handle new usernames
 		username:    username,
 		conn:        connection,
 		status:      IDLE,
