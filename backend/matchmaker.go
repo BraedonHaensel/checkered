@@ -55,7 +55,7 @@ type Matchmaker struct {
 	// Matchmaker heartbeat ticker
 	matchmakerHeartbeatTicker *time.Ticker
 
-	// Track if a recent heartbeat has been received from the leader Matchmaker
+	// Track if a recent Matchmaker heartbeat has been received
 	matchmakerHeartbeatReceived   bool
 	matchmakerHeartbeatReceivedMu sync.Mutex
 
@@ -99,6 +99,7 @@ type LeaderMessage struct {
 	LatestData AllSyncedData `json:"latest_data"`
 }
 
+// Matchmaker heartbeat message, sent from the leader to non-leader Matchmakers
 type Heartbeat struct {
 	LeaderID int `json:"leader_id"`
 }
@@ -253,20 +254,20 @@ func (m *Matchmaker) startMatchmakerHeartbeatTickHandler() {
 		}
 
 		if currentLeader.ID == m.ID {
-			// This is the leader Matchmaker. Send heartbeats
+			// This is the leader. Send heartbeats to all other Matchmakers
 			m.sendHeartbeatsFromLeaderMatchmaker()
 			continue
 		}
 
-		// This is not the leader. Ensure a heartbeat was received in time
+		// This is not the leader. Check if a heartbeat was received
 		m.matchmakerHeartbeatReceivedMu.Lock()
 		m.matchmakerHeartbeatMissesMu.Lock()
 		if m.matchmakerHeartbeatReceived {
-			// Heartbeat received in this interval. Reset for the next interval
+			// Heartbeat received. Reset for the next interval
 			m.matchmakerHeartbeatReceived = false
 			m.matchmakerHeartbeatMisses = 0
 		} else {
-			// Heartbeat missed, increment the counter
+			// Heartbeat missed, increment the consecutive misses counter
 			m.matchmakerHeartbeatMisses++
 			log.Printf("Matchmaker leader heartbeat missed (x%d)", m.matchmakerHeartbeatMisses)
 			if m.matchmakerHeartbeatMisses >= MATCHMAKER_HEARTBEAT_CONSECUTIVE_MISS_LIMIT {
@@ -277,7 +278,6 @@ func (m *Matchmaker) startMatchmakerHeartbeatTickHandler() {
 				m.InitiateElection()
 				m.matchmakerHeartbeatMisses = 0
 			}
-
 		}
 		m.matchmakerHeartbeatMissesMu.Unlock()
 		m.matchmakerHeartbeatReceivedMu.Unlock()
@@ -316,11 +316,11 @@ func (m *Matchmaker) sendHeartbeatsFromLeaderMatchmaker() {
 	}
 }
 
-// Endpoint to receive a heartbeat from the current Matchmaker leader
-func (m *Matchmaker) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
+// Endpoint to receive a Matchmaker heartbeat from the current leader
+func (m *Matchmaker) HandleMatchmakerHeartbeat(w http.ResponseWriter, r *http.Request) {
 	data, err, errStatus := parseJsonRequestData[Heartbeat](r)
 	if err != nil {
-		errMsg := fmt.Errorf("HandleHeartbeat error: %w", err)
+		errMsg := fmt.Errorf("HandleMatchmakerHeartbeat error: %w", err)
 		log.Println(errMsg)
 		http.Error(w, errMsg.Error(), errStatus)
 		return
@@ -332,7 +332,7 @@ func (m *Matchmaker) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark that a heartbeat has been received
+	// Mark that a heartbeat has been received during the current interval
 	m.matchmakerHeartbeatReceivedMu.Lock()
 	m.matchmakerHeartbeatReceived = true
 	m.matchmakerHeartbeatReceivedMu.Unlock()
