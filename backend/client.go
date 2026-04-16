@@ -90,13 +90,6 @@ func decodePayload(data []byte) (interface{}, error) {
 	return nil, fmt.Errorf("unknown payload type")
 }
 
-// message that is sent to the client when a game has been found
-type FoundGame struct {
-	Kind     string `json:"type"`
-	Side     string `json:"player_color"`
-	Opponent string `json:"opponent"`
-}
-
 type Forfeit struct {
 	Kind string `json:"type"`
 }
@@ -140,9 +133,6 @@ func (c *Client) readThread() {
 		case EnqueueRequest:
 			// log.Printf("Received message (%s)\n", p.Kind)
 			c.register(c) // Enqueue
-		case FoundGame: // TODO: remove as is not an actual message the client can send
-			// log.Printf("Received message (%s)\n", p.Kind)
-			c.handleFoundGame(p)
 		case Forfeit:
 			if c.currentGame == nil {
 				return
@@ -198,10 +188,6 @@ func (c *Client) handleDisconnect() {
 		c.currentGame.handleGameEnd()
 	}
 	c.unregister <- c
-}
-
-func (c *Client) handleFoundGame(p FoundGame) {
-	panic("unimplemented")
 }
 
 type GameStateUpdate struct {
@@ -262,7 +248,6 @@ func otherPlayer(username string, game *Game) *Client {
 
 func NewClient(username string, connection *websocket.Conn, unregister chan *Client, register func(*Client)) Client {
 	c := Client{
-		// TODO: figure out how to handle new usernames
 		username:    username,
 		conn:        connection,
 		status:      IDLE,

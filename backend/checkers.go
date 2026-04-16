@@ -618,6 +618,13 @@ func (game *Game) handleGameDraw() {
 	game.resultChan <- gameResult
 }
 
+// message that is sent to the client when a game has been found
+type FoundGame struct {
+	Kind     string `json:"type"`
+	Side     string `json:"player_color"`
+	Opponent string `json:"opponent"`
+}
+
 func (game *Game) messageFromNewGame(playerKind string, opponent string) FoundGame {
 	return FoundGame{
 		Kind:     "start",
