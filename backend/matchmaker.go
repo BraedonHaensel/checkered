@@ -17,6 +17,10 @@ import (
 
 const LEADER_ELECTION_TIMEOUT_SEC = 10 * time.Second
 const LEADER_ELECTION_BULLY_TIMEOUT_SEC = 3 * time.Second
+
+const MATCHMAKER_HEARTBEAT_INTERVAL = 3 * time.Second
+const MATCHMAKER_HEARTBEAT_CONSECUTIVE_MISS_LIMIT = 3
+
 const QUEUE_HEARTBEAT_TIMEOUT = 5 * time.Second
 
 // Responsible for handling the queue for new players finding a game, as well as
@@ -47,12 +51,24 @@ type Matchmaker struct {
 	// Other Matchmakers in the network (does not include itself)
 	otherMatchmakers   []Server
 	otherMatchmakersMu sync.Mutex
+
+	// Matchmaker heartbeat ticker
+	matchmakerHeartbeatTicker *time.Ticker
+
+	// Track if a recent Matchmaker heartbeat has been received
+	matchmakerHeartbeatReceived   bool
+	matchmakerHeartbeatReceivedMu sync.Mutex
+
+	// Track the number of consecutively missed Matchmaker heartbeats
+	matchmakerHeartbeatMisses   int
+	matchmakerHeartbeatMissesMu sync.Mutex
+
 	// Whether this server is running in the current leader election
 	runningInElection   bool
 	runningInElectionMu sync.Mutex
 	// ID of the current leader server
-	Leader     Server
-	leaderIDMu sync.Mutex
+	Leader   Server
+	leaderMu sync.Mutex
 	// Timer and chan to wait for and detect receiving a bully() response
 	bullyTimer     *time.Timer
 	bullyTimerChan chan struct{}
@@ -83,6 +99,11 @@ type LeaderMessage struct {
 	LatestData AllSyncedData `json:"latest_data"`
 }
 
+// Matchmaker heartbeat message, sent from the leader to non-leader Matchmakers
+type Heartbeat struct {
+	LeaderID int `json:"leader_id"`
+}
+
 // Matchmaker constructor
 func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 	queue := Queue[string]{}
@@ -96,13 +117,22 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 		},
 		leaderboardMu: sync.Mutex{},
 
-		URL:                    url,
-		nameServerURL:          nameServerURL,
+		URL:           url,
+		nameServerURL: nameServerURL,
+
+		matchmakerHeartbeatTicker:   time.NewTicker(MATCHMAKER_HEARTBEAT_INTERVAL),
+		matchmakerHeartbeatReceived: false,
+		matchmakerHeartbeatMisses:   0,
+
 		runningInElection:      false,
 		otherMatchmakers:       []Server{},
 		syncVersion:            0,
 		isClientRequestsLocked: false,
 	}
+
+	// Start the handler for Matchmaker heartbeat ticks
+	go matchmaker.startMatchmakerHeartbeatTickHandler()
+
 	return &matchmaker
 }
 
@@ -208,6 +238,106 @@ func (m *Matchmaker) HandleNewLeaderDataSyncRequest(w http.ResponseWriter, r *ht
 	}()
 }
 
+// Starts the Matchmaker heartbeat tick handler.
+func (m *Matchmaker) startMatchmakerHeartbeatTickHandler() {
+	defer m.matchmakerHeartbeatTicker.Stop()
+
+	// Handle each Matchmaker heartbeat tick
+	for range m.matchmakerHeartbeatTicker.C {
+		m.leaderMu.Lock()
+		currentLeader := m.Leader
+		m.leaderMu.Unlock()
+
+		if currentLeader.URL == "" {
+			// No leader chosen yet, skip heartbeat
+			continue
+		}
+
+		if currentLeader.ID == m.ID {
+			// This is the leader. Send heartbeats to all other Matchmakers
+			m.sendHeartbeatsFromLeaderMatchmaker()
+			continue
+		}
+
+		// This is not the leader. Check if a heartbeat was received
+		m.matchmakerHeartbeatReceivedMu.Lock()
+		m.matchmakerHeartbeatMissesMu.Lock()
+		if m.matchmakerHeartbeatReceived {
+			// Heartbeat received. Reset for the next interval
+			m.matchmakerHeartbeatReceived = false
+			m.matchmakerHeartbeatMisses = 0
+		} else {
+			// Heartbeat missed, increment the consecutive misses counter
+			m.matchmakerHeartbeatMisses++
+			log.Printf("Matchmaker leader heartbeat missed (x%d)", m.matchmakerHeartbeatMisses)
+			if m.matchmakerHeartbeatMisses >= MATCHMAKER_HEARTBEAT_CONSECUTIVE_MISS_LIMIT {
+				// Missed too many heartbeats in a row, assume the leader is down
+				log.Printf("Failed to receive %d consecutive Matchmaker leader heartbeats, assuming it is down",
+					MATCHMAKER_HEARTBEAT_CONSECUTIVE_MISS_LIMIT)
+				m.DeregisterOtherMatchmaker(currentLeader.ID)
+				m.InitiateElection()
+				m.matchmakerHeartbeatMisses = 0
+			}
+		}
+		m.matchmakerHeartbeatMissesMu.Unlock()
+		m.matchmakerHeartbeatReceivedMu.Unlock()
+	}
+}
+
+// Sends a heartbeat from this leader Matchmaker to all others.
+func (m *Matchmaker) sendHeartbeatsFromLeaderMatchmaker() {
+	// Create the heartbeat message
+	data := Heartbeat{LeaderID: m.ID}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Fatalf("Failed to marshal heartbeat message: %v", err)
+	}
+
+	// Track any down Matchmakers that fail to respond
+	downMatchmakers := []Server{}
+
+	// Send the heartbeat message to all other Matchmakers
+	m.otherMatchmakersMu.Lock()
+	log.Println("Sending Matchmaker heartbeats")
+	for _, otherMatchmaker := range m.otherMatchmakers {
+		res, err := http.Post(otherMatchmaker.URL+"/internal/heartbeat", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Failed to send heartbeat to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
+			downMatchmakers = append(downMatchmakers, otherMatchmaker)
+			continue
+		}
+		res.Body.Close()
+	}
+	m.otherMatchmakersMu.Unlock()
+
+	// Deregister any Matchmakers that failed to receive the heartbeat
+	for _, otherMatchmaker := range downMatchmakers {
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+	}
+}
+
+// Endpoint to receive a Matchmaker heartbeat from the current leader
+func (m *Matchmaker) HandleMatchmakerHeartbeat(w http.ResponseWriter, r *http.Request) {
+	data, err, errStatus := parseJsonRequestData[Heartbeat](r)
+	if err != nil {
+		errMsg := fmt.Errorf("HandleMatchmakerHeartbeat error: %w", err)
+		log.Println(errMsg)
+		http.Error(w, errMsg.Error(), errStatus)
+		return
+	}
+	leaderID := data.LeaderID
+
+	// Ignore heartbeats from an unexpected leader ID
+	if leaderID != m.Leader.ID {
+		return
+	}
+
+	// Mark that a heartbeat has been received during the current interval
+	m.matchmakerHeartbeatReceivedMu.Lock()
+	m.matchmakerHeartbeatReceived = true
+	m.matchmakerHeartbeatReceivedMu.Unlock()
+}
+
 // -------------------- DISTRIBUTED SYSTEMS / LEADER ELECTION USING BULLY ALGORITHM --------------------
 
 // Pauses client requests (unless already paused)
@@ -291,8 +421,9 @@ func (m *Matchmaker) DeregisterOtherMatchmaker(otherMatchmakerID int) {
 	res, err := http.Post(m.nameServerURL+"/deregister/matchmaker", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Printf("Failed to deregister Matchmaker %d: %v", otherMatchmakerID, err)
+	} else {
+		defer res.Body.Close()
 	}
-	defer res.Body.Close()
 
 	// Filter the Matchmaker out of the list of other Matchmakers
 	m.otherMatchmakersMu.Lock()
@@ -314,6 +445,7 @@ func (m *Matchmaker) DeregisterGameServer(gameServerID int) {
 	res, err := http.Post(m.nameServerURL+"/deregister/game-server", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Printf("Failed to deregister Game Server %d: %v", gameServerID, err)
+		return
 	}
 	defer res.Body.Close()
 }
@@ -422,13 +554,13 @@ func (m *Matchmaker) InitiateElection() {
 
 	if len(higherIDMatchmakers) == 0 {
 		// This server has the highest ID, declare itself leader
-		m.leaderIDMu.Lock()
+		m.leaderMu.Lock()
 		log.Printf("Declaring itself leader (has highest ID [%d])", m.ID)
 		m.Leader = Server{
 			ID:  m.ID,
 			URL: m.URL,
 		}
-		m.leaderIDMu.Unlock()
+		m.leaderMu.Unlock()
 
 		// Get the latest data from all Matchmakers, then send leader messages with it
 		m.SynchronizeDataAndSendLeaderMessages()
@@ -461,13 +593,13 @@ func (m *Matchmaker) InitiateElection() {
 	select {
 	case <-m.bullyTimer.C:
 		// Timer fired, so no bully() responses received in time. Declare itself leader
-		m.leaderIDMu.Lock()
+		m.leaderMu.Lock()
 		log.Println("No bully() responses received. Declaring itself leader with ID:", m.ID)
 		m.Leader = Server{
 			ID:  m.ID,
 			URL: m.URL,
 		}
-		m.leaderIDMu.Unlock()
+		m.leaderMu.Unlock()
 
 		// Get the latest data from all Matchmakers, then send leader messages with it
 		m.SynchronizeDataAndSendLeaderMessages()
@@ -623,14 +755,17 @@ func (m *Matchmaker) HandleLeaderRequest(w http.ResponseWriter, r *http.Request)
 	m.otherMatchmakersMu.Unlock()
 
 	// Set the new leader
-	m.leaderIDMu.Lock()
+	m.leaderMu.Lock()
 	log.Println("Received a new leader ID:", otherMatchmaker.ID)
 	m.Leader = otherMatchmaker
-	m.leaderIDMu.Unlock()
+	m.leaderMu.Unlock()
 
-	// No longer the leader, shut down all heartbeat goroutines
+	// Reset the Matchmaker heartbeat ticker interval
+	m.matchmakerHeartbeatTicker.Reset(MATCHMAKER_HEARTBEAT_INTERVAL)
+
+	// No longer the leader, shut down all queue heartbeat goroutines
 	if !m.IsLeader() {
-		m.stopAllHeartbeatWatchers()
+		m.stopAllQueueHeartbeatWatchers()
 	}
 
 	m.runningInElectionMu.Lock()
@@ -783,8 +918,8 @@ func (m *Matchmaker) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		m.queueMu.Unlock()
 
 		// Stop heartbeat watchers for matched players
-		m.stopHeartbeatWatcher(redPlayer)
-		m.stopHeartbeatWatcher(blackPlayer)
+		m.stopQueueHeartbeatWatcher(redPlayer)
+		m.stopQueueHeartbeatWatcher(blackPlayer)
 
 		match, err := m.NewMatch(redPlayer, blackPlayer)
 		if err != nil {
@@ -933,7 +1068,7 @@ func (m *Matchmaker) LeaveQueueRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stopping and removing heartbeat watcher as well
-	m.stopHeartbeatWatcher(username)
+	m.stopQueueHeartbeatWatcher(username)
 
 	m.queueMu.Lock()
 	RemoveStringValue(&m.queue, username)
@@ -992,7 +1127,7 @@ func (m *Matchmaker) startHeartbeatWatcher(username string) {
 				// Safe to remove
 				// Timer fired meaning client hasn't polled in time and we should remove them
 				log.Printf("Player \"%s\" heartbeat timed out, removing from queue", username)
-				m.stopHeartbeatWatcher(username)
+				m.stopQueueHeartbeatWatcher(username)
 				m.queueMu.Lock()
 				RemoveStringValue(&m.queue, username)
 				m.queueMu.Unlock()
@@ -1009,7 +1144,7 @@ func (m *Matchmaker) startHeartbeatWatcher(username string) {
 
 // This method is called when a player is matched, leaves or times out
 // Used to get rid of the go routine that kept a timer on the player that was removed from the queue
-func (m *Matchmaker) stopHeartbeatWatcher(username string) {
+func (m *Matchmaker) stopQueueHeartbeatWatcher(username string) {
 	m.queueHeartbeatsMu.Lock()
 	defer m.queueHeartbeatsMu.Unlock()
 	if ch, exists := m.queueHeartbeats[username]; exists {
@@ -1019,14 +1154,14 @@ func (m *Matchmaker) stopHeartbeatWatcher(username string) {
 }
 
 // Stops all hearbeat watchers, mainly just to ensure the previous leader after losing an election stops all go routines keeping tabs of clients in queue
-func (m *Matchmaker) stopAllHeartbeatWatchers() {
+func (m *Matchmaker) stopAllQueueHeartbeatWatchers() {
 	m.queueHeartbeatsMu.Lock()
 	defer m.queueHeartbeatsMu.Unlock()
 	for username, ch := range m.queueHeartbeats {
 		close(ch)
 		delete(m.queueHeartbeats, username)
 	}
-	log.Println("Stopped all heartbeat watchers (lost election)")
+	log.Println("Stopped all queue heartbeat watchers (lost election)")
 }
 
 // Checks the health of a server. Returns true if healthy, false otherwise
@@ -1081,8 +1216,6 @@ func (m *Matchmaker) RequestNewGameServer(w http.ResponseWriter, r *http.Request
 	// Deregister the Game Server
 	m.DeregisterGameServer(data.OldGameServer.ID)
 
-	// === TODO Choose a proper backup Game Server and perform necessary backup operations (probably move to a relocateGame function) ===
-	// TODO this is just a temporary fix of choosing the first server
 	log.Println("Finding a replacement Game Server for match", match.MatchID)
 
 	// Locate a new gameserver
@@ -1290,17 +1423,26 @@ func (m *Matchmaker) broadcast(endpoint string, data any) {
 		log.Fatal(err)
 	}
 
+	// Track any down Matchmakers that fail to respond
+	downMatchmakers := []Server{}
+
+	// Send the broadcast message to all other Matchmakers
 	m.otherMatchmakersMu.Lock()
-	for _, server := range m.otherMatchmakers {
-		res, err := http.Post(server.URL+endpoint, "application/json", bytes.NewBuffer(jsonData))
+	for _, otherMatchmaker := range m.otherMatchmakers {
+		res, err := http.Post(otherMatchmaker.URL+endpoint, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			log.Printf("Failed to send a broadcast message to Matchmaker %d, assuming it is down", server.ID)
-			// TODO: Inform name server that this matchmaker is down
+			log.Printf("Failed to send a broadcast message to Matchmaker %d, assuming it is down", otherMatchmaker.ID)
+			downMatchmakers = append(downMatchmakers, otherMatchmaker)
 			return
 		}
 		defer res.Body.Close()
 	}
 	m.otherMatchmakersMu.Unlock()
+
+	// Deregister any Matchmakers that failed to receive the broadcast message
+	for _, otherMatchmaker := range downMatchmakers {
+		m.DeregisterOtherMatchmaker(otherMatchmaker.ID)
+	}
 }
 
 // Broadcasts a leaderboard update to all other Matchmakers

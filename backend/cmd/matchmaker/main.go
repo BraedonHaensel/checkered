@@ -81,6 +81,11 @@ func main() {
 		matchmaker.HandleLeaderRequest(w, r)
 	})
 
+	// Endpoint to receive a Matchmaker heartbeat from the current leader
+	http.HandleFunc("POST /internal/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		matchmaker.HandleMatchmakerHeartbeat(w, r)
+	})
+
 	// Replication endpoints
 
 	http.HandleFunc("POST /internal/leaderboard", func(w http.ResponseWriter, r *http.Request) {
