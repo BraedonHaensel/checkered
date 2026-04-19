@@ -3,9 +3,11 @@ package checkered
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -83,6 +85,9 @@ type Matchmaker struct {
 	AcceptingClientRequestsMu sync.RWMutex // multiple request handlers acquire read locks
 	isClientRequestsLocked    bool         // check if write lock is already acquired
 	isClientRequestsLockedMu  sync.Mutex   // lock to safely check the above bool
+
+	// Leaderboard backup filename
+	leaderboardBackupFilename string
 }
 
 // All data that gets synchronized between Matchmakers
@@ -105,7 +110,7 @@ type Heartbeat struct {
 }
 
 // Matchmaker constructor
-func NewMatchmaker(url, nameServerURL string) *Matchmaker {
+func NewMatchmaker(url, nameServerURL string, leaderboardBackupFilename string) *Matchmaker {
 	queue := Queue[string]{}
 	InitQueue(&queue, 100)
 	matchmaker := Matchmaker{
@@ -128,12 +133,38 @@ func NewMatchmaker(url, nameServerURL string) *Matchmaker {
 		otherMatchmakers:       []Server{},
 		syncVersion:            0,
 		isClientRequestsLocked: false,
+
+		leaderboardBackupFilename: leaderboardBackupFilename,
 	}
+
+	// Attempt to load a leaderboard backup from disk
+	matchmaker.LoadLeaderboardBackupFromDisk()
 
 	// Start the handler for Matchmaker heartbeat ticks
 	go matchmaker.startMatchmakerHeartbeatTickHandler()
 
 	return &matchmaker
+}
+
+// Attempts to load a leaderboard backup from disk.
+func (m *Matchmaker) LoadLeaderboardBackupFromDisk() {
+	m.leaderboardMu.Lock()
+	defer m.leaderboardMu.Unlock()
+
+	// Check if a leaderboard backup file exists for this Matchmaker
+	if _, err := os.Stat(m.leaderboardBackupFilename); errors.Is(err, os.ErrNotExist) {
+		return
+	}
+
+	m.leaderboard = m.leaderboard.LoadBackupFromDisk(m.leaderboardBackupFilename)
+	log.Println("Loaded a leaderbard backup from disk")
+
+	// Increment the sync version. This will cause the leaderboard backup to
+	// take precedence, unless there is an ongoing Matchmaker instance with a
+	// higher sync version, in which case the backup will be ignored
+	m.syncVersionMu.Lock()
+	m.syncVersion++
+	m.syncVersionMu.Unlock()
 }
 
 // Sends a request to another Matchmaker for the latest data in order to synchronize
@@ -189,6 +220,7 @@ func (m *Matchmaker) SetAllSyncedData(data AllSyncedData) {
 
 	m.syncVersion = data.SyncVersion
 	m.leaderboard = &data.Leaderboard
+	m.leaderboard.SaveBackupToDisk(m.leaderboardBackupFilename)
 	m.queue = data.Queue
 	m.matches = data.Matches
 
@@ -1314,6 +1346,7 @@ func (m *Matchmaker) UpdateLeaderboard(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Updating leaderboard (game=%s, winner=%s, loser=%s)", data.GameID, data.Winner, data.Loser)
 	m.leaderboardMu.Lock()
 	m.leaderboard.UpdateLeaderboard(data)
+	m.leaderboard.SaveBackupToDisk(m.leaderboardBackupFilename)
 	m.leaderboardMu.Unlock()
 
 	m.IncrementSyncVersion()
@@ -1373,6 +1406,7 @@ func (m *Matchmaker) SetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	m.leaderboardMu.Lock()
 	log.Printf("Leaderboard update received: %v", data)
 	m.leaderboard = &data
+	m.leaderboard.SaveBackupToDisk(m.leaderboardBackupFilename)
 	m.IncrementSyncVersion()
 	m.leaderboardMu.Unlock()
 }
