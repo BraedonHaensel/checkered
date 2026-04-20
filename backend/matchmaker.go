@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"slices"
@@ -890,8 +891,8 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 		return Match{}, fmt.Errorf("no game servers available")
 	}
 
-	// Pick the first one
-	gameServer := gameServers[0]
+	// Pick a random server one
+	gameServer := gameServers[rand.Int()%len(gameServers)]
 	log.Printf("Picked game server: %s (ID: %d)", gameServer.URL, gameServer.ID)
 
 	return Match{
