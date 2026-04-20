@@ -572,7 +572,7 @@ func (game *Game) sendCurrentState() {
 	}
 	gameStateBytes, err := json.Marshal(newState)
 	if err != nil {
-		log.Printf("Error at Marshalling\n")
+		log.Printf("Error at Marshalling: %s\n", err.Error())
 		return
 	}
 
