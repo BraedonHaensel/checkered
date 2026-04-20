@@ -1,7 +1,10 @@
 package checkered
 
 import (
+	"bytes"
+	"encoding/json"
 	"log"
+	"os"
 )
 
 type Leaderboard struct {
@@ -68,13 +71,37 @@ func (lb *Leaderboard) UpdateLeaderboard(result GameResult) bool {
 	return true
 }
 
-// / return a json payload of the current leaderboard
-// func (s *GameServer) GetLeaderboard(w http.ResponseWriter, _ *http.Request) {
-// 	err := json.NewEncoder(w).Encode(s.leaderboard)
-// 	if err != nil {
-// 		errorStr := fmt.Errorf("getLeaderboard error: %s", err)
-// 		fmt.Println(errorStr)
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// }
+// Saves the leaderboard to disk.
+func (lb *Leaderboard) SaveBackupToDisk(filename string) {
+	// Marshal to JSON
+	jsonData, err := json.Marshal(lb)
+	if err != nil {
+		log.Fatal("Failed to marshal leaderboard:", err)
+	}
+
+	// Write to the backup file
+	err = os.WriteFile(filename, jsonData, 0644)
+	if err != nil {
+		log.Fatal("Failed to write leaderboard backup:", err)
+	}
+}
+
+// Loads and returns the leaderboard from disk.
+func (lb *Leaderboard) LoadBackupFromDisk(filename string) *Leaderboard {
+	// Read from the backup file
+	fileData, err := os.ReadFile(filename)
+	if err != nil {
+		log.Fatal("Failed to load leaderboard backup:", err)
+	}
+
+	// Parse the JSON file data
+	var leaderboardData Leaderboard
+	decoder := json.NewDecoder(bytes.NewReader(fileData))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&leaderboardData)
+	if err != nil {
+		log.Fatal("Failed to decode leaderboard backup:", err)
+	}
+
+	return &leaderboardData
+}

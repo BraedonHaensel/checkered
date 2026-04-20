@@ -5,3 +5,6 @@
 .env
 venv/
 *.log
+
+# Ignore leaderboard backup files
+leaderboard-backup-*.json

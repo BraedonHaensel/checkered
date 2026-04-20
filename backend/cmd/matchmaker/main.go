@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -35,8 +36,11 @@ func main() {
 
 	url := Checkered.GetFullURL(addr)
 
+	urlParts := strings.Split(url, ":")
+	leaderboardBackupFilename := fmt.Sprintf("leaderboard-backup-%s.json", urlParts[len(urlParts)-1])
+
 	// Instantiating a new matchmaker object
-	matchmaker := Checkered.NewMatchmaker(url, nameServerURL)
+	matchmaker := Checkered.NewMatchmaker(url, nameServerURL, leaderboardBackupFilename)
 
 	// ---------------------------------------------
 
