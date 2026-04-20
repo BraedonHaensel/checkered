@@ -558,7 +558,30 @@ func (game *Game) currentWinner() string {
 	}
 }
 
+// Used to send the current state in the event of a game over 
+// or a game draw before the end game message is sent.
+func (game *Game) sendCurrentState() {
+	newState := GameStateUpdate{
+		Kind:          "update_state",
+		TileStates:    game.tileStates,
+		Turn:          "red",
+		PreviousMoves: game.previousMoves,
+	}
+	if game.turn == Black {
+		newState.Turn = "black"
+	}
+	gameStateBytes, err := json.Marshal(newState)
+	if err != nil {
+		log.Printf("Error at Marshalling\n")
+		return
+	}
+
+	game.redPlayer.send <- gameStateBytes 
+	game.blackPlayer.send <- gameStateBytes
+}
+
 func (game *Game) handleGameEnd() {
+	game.sendCurrentState()
 	winner := game.currentWinner()
 	endMessage := GameEndMessage{
 		Kind:   "game_end",
@@ -594,6 +617,7 @@ func (game *Game) handleGameEnd() {
 }
 
 func (game *Game) handleGameDraw() {
+	game.sendCurrentState()
 	endMessage := GameEndMessage{
 		Kind:   "game_end",
 		Winner: "draw",
