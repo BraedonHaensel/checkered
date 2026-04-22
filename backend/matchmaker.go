@@ -891,7 +891,7 @@ func (m *Matchmaker) NewMatch(redPlayer, blackPlayer string) (Match, error) {
 		return Match{}, fmt.Errorf("no game servers available")
 	}
 
-	// Pick a random server one
+	// Pick a random server
 	gameServer := gameServers[rand.Int()%len(gameServers)]
 	log.Printf("Picked game server: %s (ID: %d)", gameServer.URL, gameServer.ID)
 
