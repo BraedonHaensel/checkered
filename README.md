@@ -18,6 +18,11 @@ This application is for both casual players who want to play for fun and competi
 
 For a brief introduction to our application and its underlying distributed system, please see our [presentation video](documents/checkered-10-minute-presentation.mp4).
 
+## Project Report
+
+For a detailed report of the application and its distributed system components, please see our [project report](documents/checkered-final-report.pdf).
+
+
 ## Process types
 
 The distributed system for Checkered involves the following process types:
