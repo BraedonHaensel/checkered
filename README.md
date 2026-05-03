@@ -6,6 +6,14 @@ Checkered is an online, distributed platform for the classic board game [checker
 
 This application is for both casual players who want to play for fun and competitive players aiming to climb the leaderboards!
 
+# Group Members
+
+- Braedon Haensel
+- Brian Heckel
+- Avery Keuben
+- Pranab Mainali
+- Taylor Wong
+
 ## Project Demo
 
 For a brief introduction to our application and its underlying distributed system, please see our [presentation video](documents/checkered-10-minute-presentation.mp4).
